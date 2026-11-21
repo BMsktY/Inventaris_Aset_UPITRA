@@ -3,6 +3,7 @@ const SyncService = {
   collections: {
     assets: "assets",
     rooms: "rooms",
+    buildings: "buildings",
     reports: "reports",
     scans: "scans"
   },
@@ -16,6 +17,7 @@ const SyncService = {
       return {
         assets: null,
         rooms: null,
+        buildings: null,
         reports: null,
         cloudEmpty: false
       };
@@ -24,21 +26,30 @@ const SyncService = {
     const reportsQuery = App.currentUser.role === "admin"
       ? FirebaseService.db.collection(this.collections.reports)
       : FirebaseService.db.collection(this.collections.reports).where("senderUid", "==", App.currentUser.uid);
-    const [assetsSnapshot, roomsSnapshot, reportsSnapshot] = await Promise.all([
+    const [assetsSnapshot, roomsSnapshot, buildingsSnapshot, reportsSnapshot] = await Promise.all([
       FirebaseService.db.collection(this.collections.assets).get(),
       FirebaseService.db.collection(this.collections.rooms).get(),
+      FirebaseService.db.collection(this.collections.buildings).get(),
       reportsQuery.get()
     ]);
     return {
       assets: assetsSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
       rooms: roomsSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
+      buildings: buildingsSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
       reports: reportsSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
       cloudEmpty: assetsSnapshot.empty && roomsSnapshot.empty
         && App.currentUser.role === "admin" && reportsSnapshot.empty
     };
   },
 
-  subscribe({ onAssets, onRooms = () => {}, onReports, onScans = () => {}, onError = console.error }) {
+  subscribe({
+    onAssets,
+    onRooms = () => {},
+    onBuildings = () => {},
+    onReports,
+    onScans = () => {},
+    onError = console.error
+  }) {
     this.unsubscribe();
     if (!this.firebaseEnabled) return;
 
@@ -50,6 +61,10 @@ const SyncService = {
       ),
       db.collection(this.collections.rooms).onSnapshot(
         (snapshot) => onRooms(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))),
+        onError
+      ),
+      db.collection(this.collections.buildings).onSnapshot(
+        (snapshot) => onBuildings(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))),
         onError
       ),
       (App.currentUser.role === "admin"
@@ -91,6 +106,85 @@ const SyncService = {
       await FirebaseService.db.collection(this.collections.rooms).doc(id).set(data, { merge: true });
     }
     localStorage.setItem("sarpras_rooms", JSON.stringify(App.rooms));
+  },
+
+  async saveBuilding(building) {
+    if (this.firebaseEnabled) {
+      const { id, ...data } = building;
+      await FirebaseService.db.collection(this.collections.buildings).doc(id).set(data, { merge: true });
+    }
+    localStorage.setItem("sarpras_buildings", JSON.stringify(App.buildings));
+  },
+
+  async deleteBuilding(buildingId) {
+    if (this.firebaseEnabled) {
+      await FirebaseService.db.collection(this.collections.buildings).doc(buildingId).delete();
+    }
+    localStorage.setItem("sarpras_buildings", JSON.stringify(App.buildings));
+  },
+
+  async renameBuilding(building, newName) {
+    if (!this.firebaseEnabled) return;
+    const db = FirebaseService.db;
+    const [assetsSnapshot, roomsSnapshot] = await Promise.all([
+      db.collection(this.collections.assets).where("gedung", "==", building.name).get(),
+      db.collection(this.collections.rooms).where("gedung", "==", building.name).get()
+    ]);
+    const writes = assetsSnapshot.size + roomsSnapshot.size + 1;
+    if (writes > 500) throw new Error("Gedung memiliki terlalu banyak data untuk diganti namanya sekaligus.");
+
+    const batch = db.batch();
+    assetsSnapshot.docs.forEach((doc) => {
+      const asset = doc.data();
+      const location = typeof asset.lokasi === "string" && asset.lokasi.startsWith(building.name)
+        ? `${newName}${asset.lokasi.slice(building.name.length)}`
+        : asset.lokasi;
+      batch.update(doc.ref, { gedung: newName, ...(location ? { lokasi: location } : {}) });
+    });
+    roomsSnapshot.docs.forEach((doc) => batch.update(doc.ref, { gedung: newName }));
+    batch.set(db.collection(this.collections.buildings).doc(building.id), {
+      name: newName,
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+    await batch.commit();
+  },
+
+  async renameFloor(building, oldFloor, newFloor, nextFloors) {
+    if (!this.firebaseEnabled) return;
+    const db = FirebaseService.db;
+    const [assetsSnapshot, roomsSnapshot] = await Promise.all([
+      db.collection(this.collections.assets).where("gedung", "==", building.name).get(),
+      db.collection(this.collections.rooms).where("gedung", "==", building.name).get()
+    ]);
+    const normalizedFloor = (value) => {
+      const text = String(value || "").trim().replace(/\s+/g, " ");
+      return /^lantai\b/i.test(text) ? text.replace(/^lantai\b\s*/i, "Lantai ") : `Lantai ${text}`;
+    };
+    const assetFloor = (asset) => {
+      if (asset.lantai) return normalizedFloor(asset.lantai);
+      const match = String(asset.lokasi || "").match(/lantai\s*([^\s·,-]+)/i);
+      return match ? normalizedFloor(match[1]) : "Lantai 1";
+    };
+    const assetDocs = assetsSnapshot.docs.filter((doc) => assetFloor(doc.data()) === oldFloor);
+    const roomDocs = roomsSnapshot.docs.filter((doc) => normalizedFloor(doc.data().lantai) === oldFloor);
+    if (assetDocs.length + roomDocs.length + 1 > 500) {
+      throw new Error("Lantai memiliki terlalu banyak data untuk diperbarui sekaligus.");
+    }
+
+    const batch = db.batch();
+    assetDocs.forEach((doc) => {
+      const asset = doc.data();
+      const location = typeof asset.lokasi === "string" && /lantai\s*[^·,-]+/i.test(asset.lokasi)
+        ? asset.lokasi.replace(/lantai\s*[^·,-]+/i, newFloor)
+        : `${building.name} · ${newFloor}`;
+      batch.update(doc.ref, { lantai: newFloor, lokasi: location });
+    });
+    roomDocs.forEach((doc) => batch.update(doc.ref, { lantai: newFloor }));
+    batch.set(db.collection(this.collections.buildings).doc(building.id), {
+      floors: nextFloors,
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+    await batch.commit();
   },
 
   async deleteAsset(assetId) {

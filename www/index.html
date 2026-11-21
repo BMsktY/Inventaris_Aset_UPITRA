@@ -42,7 +42,7 @@
             <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
           </svg>
           <input type="password" id="login-password" placeholder="Masukkan kata sandi" required autocomplete="current-password" />
-          <button type="button" id="btn-toggle-password" class="password-toggle-btn" aria-label="Lihat kata sandi">
+          <button type="button" id="btn-toggle-password" class="password-toggle-btn" data-password-toggle="login-password" aria-label="Lihat kata sandi">
             <svg id="icon-eye-show" viewBox="0 0 24 24" aria-hidden="true">
               <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
               <circle cx="12" cy="12" r="3"/>
@@ -186,6 +186,29 @@
         <div class="card room-management-card admin-only">
           <div class="section-heading room-management-heading">
             <div>
+              <h2>Kelola gedung & lantai</h2>
+              <p>Daftarkan lokasi sebelum menambahkan ruangan atau aset.</p>
+            </div>
+          </div>
+          <form id="building-form">
+            <div class="form-row-2col">
+              <div class="form-group">
+                <label for="building-name">Nama gedung *</label>
+                <input type="text" id="building-name" placeholder="Contoh: Gedung 6" required maxlength="60" />
+              </div>
+              <div class="form-group">
+                <label for="building-floor">Lantai *</label>
+                <input type="text" id="building-floor" value="Lantai 1" placeholder="Contoh: Lantai 2" required maxlength="60" />
+              </div>
+            </div>
+            <button type="submit" class="btn btn-primary room-submit-button">Simpan gedung / lantai</button>
+            <p id="building-form-status" class="room-form-status" role="status" aria-live="polite"></p>
+          </form>
+          <div id="building-admin-list" class="room-admin-list"></div>
+        </div>
+        <div class="card room-management-card admin-only">
+          <div class="section-heading room-management-heading">
+            <div>
               <h2>Kelola ruangan</h2>
               <p>Tambahkan ruangan beserta gedung dan lantainya.</p>
             </div>
@@ -199,12 +222,11 @@
             <div class="form-row-2col">
               <div class="form-group">
                 <label for="room-building">Gedung *</label>
-                <input type="text" id="room-building" list="room-building-options" value="Gedung 6" required maxlength="60" />
-                <datalist id="room-building-options"></datalist>
+                <select id="room-building" required></select>
               </div>
               <div class="form-group">
                 <label for="room-floor">Lantai *</label>
-                <input type="text" id="room-floor" value="Lantai 1" placeholder="Contoh: Lantai 2" required maxlength="60" />
+                <select id="room-floor" required></select>
               </div>
             </div>
             <button type="submit" class="btn btn-primary room-submit-button">Tambah ruangan</button>
@@ -294,6 +316,7 @@
         <div class="scan-viewport-container">
           <div class="scan-viewport" id="scan-viewport">
             <video id="scan-camera-video" class="scan-camera-video-stream hidden" playsinline muted></video>
+            <div class="scan-laser-line" aria-hidden="true"></div>
 
             <div id="scan-camera-indicator" class="scan-camera-indicator is-inactive" role="status" aria-live="polite">
               <span class="scan-camera-status-dot" aria-hidden="true"></span>
@@ -475,7 +498,19 @@
               </div>
               <div class="form-group">
                 <label for="managed-password">Kata Sandi <span id="managed-password-hint">(wajib untuk akun baru)</span></label>
-                <input type="password" id="managed-password" minlength="6" autocomplete="new-password" required />
+                <div class="password-field-wrapper">
+                  <input type="password" id="managed-password" minlength="6" autocomplete="new-password" required />
+                  <button type="button" class="password-toggle-btn" data-password-toggle="managed-password" aria-label="Lihat kata sandi">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                      <circle cx="12" cy="12" r="3"/>
+                    </svg>
+                    <svg class="hidden" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                      <line x1="1" y1="1" x2="23" y2="23"/>
+                    </svg>
+                  </button>
+                </div>
               </div>
               <div class="form-group">
                 <label for="managed-unit">Unit / Fakultas / Biro</label>
@@ -489,6 +524,7 @@
                 </select>
               </div>
               <button type="submit" class="btn btn-primary">Simpan Akun Pengguna</button>
+              <button type="button" id="btn-delete-managed-user" class="btn btn-danger hidden">Hapus akun ini</button>
               <button type="button" id="btn-user-new" class="btn btn-secondary">Tambah Akun Baru</button>
             </form>
           </details>

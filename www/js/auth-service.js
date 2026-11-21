@@ -205,15 +205,24 @@ const AuthService = {
 
   async upsertUserAccount(payload) {
     if (this.firebaseEnabled) {
-      const result = await FirebaseService.functions.httpsCallable("adminUpsertUser")({
-        uid: payload.id || null,
-        name: payload.name.trim(),
-        email: payload.email.trim().toLowerCase(),
-        unit: payload.unit.trim(),
-        role: payload.role === "admin" ? "admin" : "user",
-        password: payload.password || ""
-      });
-      return result.data;
+      try {
+        const result = await FirebaseService.functions.httpsCallable("adminUpsertUser")({
+          uid: payload.id || null,
+          name: payload.name.trim(),
+          email: payload.email.trim().toLowerCase(),
+          unit: payload.unit.trim(),
+          role: payload.role === "admin" ? "admin" : "user",
+          password: payload.password || ""
+        });
+        return result.data;
+      } catch (error) {
+        if (error.code === "functions/internal" || error.code === "functions/unavailable") {
+          throw new Error(
+            "Fungsi adminUpsertUser tidak dapat dijangkau. Deploy ulang Cloud Functions, lalu muat ulang aplikasi."
+          );
+        }
+        throw error;
+      }
     }
 
     const users = this.getUsers();
@@ -247,8 +256,17 @@ const AuthService = {
 
   async deleteUserAccount(userId) {
     if (this.firebaseEnabled) {
-      await FirebaseService.functions.httpsCallable("adminDeleteUser")({ uid: userId });
-      return;
+      try {
+        await FirebaseService.functions.httpsCallable("adminDeleteUser")({ uid: userId });
+        return;
+      } catch (error) {
+        if (error.code === "functions/internal" || error.code === "functions/unavailable") {
+          throw new Error(
+            "Fungsi adminDeleteUser tidak dapat dijangkau. Deploy ulang Cloud Functions, lalu muat ulang aplikasi."
+          );
+        }
+        throw error;
+      }
     }
     if (userId === "admin") throw new Error("Akun admin utama tidak dapat dihapus.");
     this.saveUsers(this.getUsers().filter((user) => user.id !== userId));

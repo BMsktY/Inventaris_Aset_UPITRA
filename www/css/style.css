@@ -167,7 +167,9 @@ body {
 
 .password-toggle-btn {
   position: absolute;
+  top: 50%;
   right: 10px;
+  transform: translateY(-50%);
   background: none;
   border: none;
   color: var(--text-muted);
@@ -176,6 +178,14 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.password-field-wrapper {
+  position: relative;
+}
+
+.password-field-wrapper input {
+  padding-right: 40px;
 }
 
 .password-toggle-btn svg {
@@ -419,7 +429,8 @@ input:focus, select:focus, textarea:focus {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--primary);
+  background: var(--danger);
+  box-shadow: 0 0 0 2px #ffffff;
 }
 
 .container {
@@ -663,6 +674,37 @@ input:focus, select:focus, textarea:focus {
   border-color: var(--primary);
 }
 
+.room-location-group {
+  padding: 12px 0 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.room-location-group:first-child {
+  padding-top: 0;
+}
+
+.room-location-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 10px;
+  color: var(--text-main);
+  font-size: 12px;
+  font-weight: 750;
+  text-align: center;
+}
+
+.room-location-heading::before,
+.room-location-heading::after {
+  content: "";
+  flex: 1;
+  border-top: 1px solid var(--border);
+}
+
+.room-location-list .room-card:last-child {
+  margin-bottom: 0;
+}
+
 .room-management-card {
   margin-bottom: 16px;
 }
@@ -710,6 +752,66 @@ input:focus, select:focus, textarea:focus {
   max-height: 220px;
   margin-top: 8px;
   overflow-y: auto;
+}
+
+.building-admin-item {
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: #ffffff;
+}
+
+.building-admin-heading,
+.building-floor-item,
+.building-admin-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.building-admin-heading > strong {
+  font-size: 12px;
+}
+
+.building-admin-actions {
+  flex: 0 0 auto;
+}
+
+.building-admin-actions .btn-icon-square {
+  width: auto;
+  min-width: 40px;
+  height: 30px;
+  padding: 0 7px;
+  font-size: 10px;
+}
+
+.building-floor-list {
+  display: grid;
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.building-floor-item {
+  min-height: 32px;
+  padding: 4px 8px;
+  border-radius: 7px;
+  background: var(--bg-app);
+  font-size: 11px;
+}
+
+.building-text-action {
+  padding: 4px 6px;
+  border: 0;
+  color: var(--primary-dark);
+  background: transparent;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.building-text-action.is-danger {
+  color: var(--danger);
 }
 
 .room-admin-item {
@@ -1039,6 +1141,40 @@ input:focus, select:focus, textarea:focus {
 .scan-viewport.is-camera-active {
   border: 2px solid var(--primary);
   box-shadow: 0 0 0 3px rgba(8, 125, 187, 0.18);
+}
+
+.scan-laser-line {
+  position: absolute;
+  z-index: 3;
+  top: 24px;
+  left: 12%;
+  width: 76%;
+  height: 2px;
+  opacity: 0;
+  pointer-events: none;
+  background: #ff3b4e;
+  box-shadow: 0 0 7px 2px rgba(255, 59, 78, 0.8), 0 0 18px 4px rgba(255, 59, 78, 0.38);
+}
+
+.scan-viewport.is-camera-active .scan-laser-line {
+  opacity: 1;
+  animation: scan-laser-sweep 1.8s ease-in-out infinite alternate;
+}
+
+@keyframes scan-laser-sweep {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(calc(min(42vh, 360px) - 52px));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scan-viewport.is-camera-active .scan-laser-line {
+    animation: none;
+    top: 50%;
+  }
 }
 
 .label-left-brand {
@@ -1414,36 +1550,36 @@ input:focus, select:focus, textarea:focus {
 
 .scan-corner-bracket {
   position: absolute;
-  width: 28px;
-  height: 28px;
+  width: 22px;
+  height: 22px;
   z-index: 2;
   border: 3px solid var(--primary);
 }
 
 .scan-corner-bracket.top-left {
-  top: 24px;
-  left: 24px;
+  top: 16px;
+  left: 16px;
   border-right: none;
   border-bottom: none;
 }
 
 .scan-corner-bracket.top-right {
-  top: 24px;
-  right: 24px;
+  top: 16px;
+  right: 16px;
   border-left: none;
   border-bottom: none;
 }
 
 .scan-corner-bracket.bottom-left {
-  bottom: 24px;
-  left: 24px;
+  bottom: 16px;
+  left: 16px;
   border-right: none;
   border-top: none;
 }
 
 .scan-corner-bracket.bottom-right {
-  bottom: 24px;
-  right: 24px;
+  bottom: 16px;
+  right: 16px;
   border-left: none;
   border-top: none;
 }

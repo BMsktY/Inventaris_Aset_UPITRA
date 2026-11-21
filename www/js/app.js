@@ -45,6 +45,7 @@ const App = {
   currentUser: null,
   assets: [],
   rooms: [],
+  buildings: [],
   reports: [],
   selectedBuilding: "Gedung 6",
   fnfState: {
@@ -77,6 +78,7 @@ const App = {
     this.bindEvents();
     this.assets = this.readLocalData("sarpras_assets", SAMPLE_ASSETS);
     this.rooms = this.readLocalData("sarpras_rooms", []);
+    this.buildings = this.readLocalData("sarpras_buildings", []);
     this.reports = this.readLocalData("sarpras_reports", DEFAULT_SAMPLE_REPORTS);
     this.searchHistory = this.readLocalData("sarpras_search_history", ["Kursi Multi Function Hall", "PRYT.MFHL.01"]);
     this.setStorageStatus();
@@ -125,9 +127,17 @@ const App = {
       if (loginBanner) loginBanner.textContent = text;
       return;
     }
-    const text = message || (FirebaseService.ready
-      ? "Firebase siap. Data aset dan laporan tersinkron antarperangkat."
-      : `Firebase belum siap${FirebaseService.error ? `: ${FirebaseService.error.message}` : ". Periksa koneksi internet."}`);
+    if (!message && FirebaseService.ready) {
+      console.info("Firebase siap. Data aset dan laporan tersinkron antarperangkat.");
+      [banner, loginBanner].forEach((element) => {
+        if (element) {
+          element.textContent = "";
+          element.classList.add("hidden");
+        }
+      });
+      return;
+    }
+    const text = message || `Firebase belum siap${FirebaseService.error ? `: ${FirebaseService.error.message}` : ". Periksa koneksi internet."}`;
     if (banner) {
       banner.textContent = text;
       banner.classList.remove("hidden");
@@ -177,24 +187,29 @@ const App = {
     document.addEventListener("focusin", () => window.setTimeout(updateKeyboardInset, 100));
     document.addEventListener("focusout", () => window.setTimeout(updateKeyboardInset, 150));
 
-    // Toggle Password Visibility
-    const togglePassBtn = document.getElementById("btn-toggle-password");
-    if (togglePassBtn) {
-      togglePassBtn.addEventListener("click", () => {
-        const passInput = document.getElementById("login-password");
-        const eyeShow = document.getElementById("icon-eye-show");
-        const eyeHide = document.getElementById("icon-eye-hide");
-        if (passInput.type === "password") {
-          passInput.type = "text";
-          eyeShow.classList.add("hidden");
-          eyeHide.classList.remove("hidden");
-        } else {
-          passInput.type = "password";
-          eyeShow.classList.remove("hidden");
-          eyeHide.classList.add("hidden");
-        }
+    document.querySelectorAll("[data-password-toggle]").forEach((toggle) => {
+      toggle.addEventListener("click", () => {
+        const input = document.getElementById(toggle.dataset.passwordToggle);
+        if (!input) return;
+        const [showIcon, hideIcon] = toggle.querySelectorAll("svg");
+        const showPassword = input.type === "password";
+        input.type = showPassword ? "text" : "password";
+        showIcon.classList.toggle("hidden", showPassword);
+        hideIcon.classList.toggle("hidden", !showPassword);
+        toggle.setAttribute("aria-label", showPassword ? "Sembunyikan kata sandi" : "Lihat kata sandi");
       });
-    }
+    });
+    document.getElementById("user-crud-form").addEventListener("reset", () => {
+      const passwordInput = document.getElementById("managed-password");
+      const toggle = document.querySelector('[data-password-toggle="managed-password"]');
+      if (!passwordInput || !toggle) return;
+      passwordInput.type = "password";
+      const [showIcon, hideIcon] = toggle.querySelectorAll("svg");
+      showIcon.classList.remove("hidden");
+      hideIcon.classList.add("hidden");
+      toggle.setAttribute("aria-label", "Lihat kata sandi");
+      document.getElementById("btn-delete-managed-user").classList.add("hidden");
+    });
 
     // Login Form
     document.getElementById("login-form").addEventListener("submit", async (e) => {
@@ -291,8 +306,8 @@ const App = {
 
     // Notification Button
     document.getElementById("btn-notif").addEventListener("click", () => {
+      this.updateNotification(true);
       this.switchTab("tab-reports");
-      document.getElementById("notif-dot").classList.add("hidden");
     });
 
     // Search Input & Filters
@@ -568,6 +583,10 @@ const App = {
         status.textContent = "Nama ruangan, gedung, dan lantai wajib diisi.";
         return;
       }
+      if (!this.getFloorsForBuilding(building).includes(floor)) {
+        status.textContent = "Pilih lantai yang sudah terdaftar pada gedung ini.";
+        return;
+      }
 
       const room = {
         id: `room-${Date.now()}`,
@@ -607,6 +626,66 @@ const App = {
       this.populateSearchRooms();
     });
 
+    document.getElementById("room-building").addEventListener("change", () => {
+      this.renderRoomFloorOptions();
+    });
+    document.getElementById("building-admin-list").addEventListener("click", (event) => {
+      this.handleBuildingManagementAction(event);
+    });
+
+    document.getElementById("building-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const status = document.getElementById("building-form-status");
+      if (!this.currentUser || this.currentUser.role !== "admin") {
+        status.textContent = "Hanya Admin yang dapat mengelola gedung dan lantai.";
+        return;
+      }
+
+      const name = this.normalizeBuildingName(document.getElementById("building-name").value);
+      const floor = this.normalizeFloorName(document.getElementById("building-floor").value);
+      if (!name || !floor) {
+        status.textContent = "Nama gedung dan lantai wajib diisi.";
+        return;
+      }
+
+      const existing = this.buildings.find((building) => building.name.toLowerCase() === name.toLowerCase());
+      const building = existing || {
+        id: `building-${Date.now()}`,
+        name,
+        floors: this.getFloorsForBuilding(name),
+        createdAt: new Date().toISOString(),
+        createdByUid: this.currentUser.uid
+      };
+      const previousFloors = [...(building.floors || [])];
+      const floors = [...new Set([...previousFloors.map((value) => this.normalizeFloorName(value)), floor])];
+      if (existing && floors.length === previousFloors.length) {
+        status.textContent = `${floor} sudah terdaftar pada ${name}.`;
+        return;
+      }
+      building.floors = floors;
+      building.updatedAt = new Date().toISOString();
+      if (!existing) this.buildings.push(building);
+
+      try {
+        await SyncService.saveBuilding(building);
+      } catch (error) {
+        if (existing) building.floors = previousFloors;
+        else this.buildings = this.buildings.filter((item) => item.id !== building.id);
+        status.textContent = `Gedung/lantai gagal disimpan: ${error.message}`;
+        return;
+      }
+      localStorage.setItem("sarpras_buildings", JSON.stringify(this.buildings));
+      document.getElementById("building-form").reset();
+      document.getElementById("building-floor").value = "Lantai 1";
+      status.textContent = `${name} · ${floor} berhasil disimpan.`;
+      this.renderBuildingFilter();
+      this.renderBuildingManagement();
+      this.renderRoomBuildingOptions(name);
+      this.renderAssetLocationOptions();
+      this.renderDashboardStats();
+      this.renderFNF();
+    });
+
     // User Form Submit
     document.getElementById("user-crud-form").addEventListener("submit", async (e) => {
       e.preventDefault();
@@ -642,6 +721,10 @@ const App = {
       document.getElementById("managed-uid").value = "";
       document.getElementById("managed-password").required = true;
       document.getElementById("managed-password-hint").textContent = "(wajib untuk akun baru)";
+    });
+    document.getElementById("btn-delete-managed-user").addEventListener("click", async () => {
+      const userId = document.getElementById("managed-uid").value.trim();
+      if (userId) await this.removeUser(userId);
     });
   },
 
@@ -680,12 +763,16 @@ const App = {
       this.rooms = data.rooms === null
         ? this.readLocalData("sarpras_rooms", [])
         : data.rooms;
+      this.buildings = data.buildings === null
+        ? this.readLocalData("sarpras_buildings", [])
+        : data.buildings;
       const localReports = this.readLocalData("sarpras_reports", DEFAULT_SAMPLE_REPORTS);
       this.reports = data.reports === null
         ? (isAdmin ? localReports : localReports.filter((report) => report.senderUid === this.currentUser.uid))
         : data.reports;
       this.persistAssets();
       this.persistRooms();
+      localStorage.setItem("sarpras_buildings", JSON.stringify(this.buildings));
       if (data.reports === null && isAdmin) {
         localStorage.setItem("sarpras_reports", JSON.stringify(this.reports));
       }
@@ -711,6 +798,7 @@ const App = {
     this.renderReportsTimeline();
     this.renderProfile();
     this.renderRoomManagement();
+    this.renderBuildingManagement();
     if (isAdmin) this.renderManagedUsers();
     this.updateNotification();
 
@@ -736,6 +824,16 @@ const App = {
           this.renderRoomManagement();
           this.renderAssetLocationOptions();
           this.populateSearchRooms();
+        },
+        onBuildings: (buildings) => {
+          this.buildings = buildings;
+          localStorage.setItem("sarpras_buildings", JSON.stringify(this.buildings));
+          this.renderBuildingFilter();
+          this.renderBuildingManagement();
+          this.renderRoomBuildingOptions();
+          this.renderAssetLocationOptions();
+          this.renderDashboardStats();
+          this.renderFNF();
         },
         onReports: (reports) => {
           this.reports = reports;
@@ -767,13 +865,45 @@ const App = {
     }
   },
 
-  updateNotification() {
+  updateNotification(markRead = false) {
     const dot = document.getElementById("notif-dot");
     if (!dot) return;
-    const hasNotification = this.currentUser && this.currentUser.role === "admin"
-      ? this.reports.length > 0
-      : this.reports.some((report) => report.senderUid === this.currentUser.uid && report.feedback);
-    dot.classList.toggle("hidden", !hasNotification);
+    if (!this.currentUser) {
+      dot.classList.add("hidden");
+      return;
+    }
+
+    const userId = this.currentUser.uid || this.currentUser.id;
+    const events = this.currentUser.role === "admin"
+      ? this.reports.map((report) => `report:${report.id || ""}:${report.createdAt || ""}`)
+      : this.reports
+        .filter((report) => report.senderUid === userId && report.feedback)
+        .map((report) => `feedback:${report.id || ""}:${report.feedbackAt || report.feedback}`);
+    const storageKey = `sarpras-notifications-seen-${userId}`;
+    let seenEvents;
+    try {
+      const stored = localStorage.getItem(storageKey);
+      seenEvents = stored === null ? null : JSON.parse(stored);
+      if (!Array.isArray(seenEvents)) throw new Error("Status notifikasi tidak valid.");
+    } catch (error) {
+      console.warn("Status notifikasi tidak dapat dibaca; daftar saat ini ditandai sebagai sudah dilihat.", error);
+      seenEvents = null;
+    }
+
+    if (seenEvents === null) {
+      localStorage.setItem(storageKey, JSON.stringify(events));
+      dot.classList.add("hidden");
+      document.getElementById("btn-notif").setAttribute("aria-label", "Notifikasi pesan");
+      return;
+    }
+
+    const hasUnread = !markRead && events.some((event) => !seenEvents.includes(event));
+    dot.classList.toggle("hidden", !hasUnread);
+    document.getElementById("btn-notif").setAttribute(
+      "aria-label",
+      hasUnread ? "Ada informasi baru" : "Notifikasi pesan"
+    );
+    if (markRead) localStorage.setItem(storageKey, JSON.stringify(events));
   },
 
   async toggleCameraScanner() {
@@ -876,7 +1006,6 @@ const App = {
       const btnLabel = document.getElementById("camera-button-label");
       if (btnLabel) btnLabel.textContent = "Tutup kamera";
       if (btn) btn.setAttribute("aria-pressed", "true");
-      const torchHint = this.cameraTorchSupported ? "" : " Lampu flash tidak tersedia di perangkat ini.";
       const completeScan = async (rawValue) => {
         if (!this.cameraStream) return;
         document.getElementById("scan-raw-input").value = rawValue;
@@ -896,7 +1025,7 @@ const App = {
       }
 
       if (nativeDetector) {
-        if (status) status.textContent = `Arahkan kamera ke barcode Code 39.${torchHint}`;
+        if (status) status.textContent = "";
         const detectFrame = async () => {
           if (!this.cameraStream || !video) return;
           try {
@@ -915,7 +1044,7 @@ const App = {
         };
         this.cameraFrame = requestAnimationFrame(detectFrame);
       } else if (window.Code39Scanner) {
-        if (status) status.textContent = `Pemindai Code 39 aktif. Dekatkan barcode ke kamera.${torchHint}`;
+        if (status) status.textContent = "";
         this.cameraReaderControls = await window.Code39Scanner.start(
           video,
           (rawValue) => completeScan(rawValue),
@@ -926,7 +1055,7 @@ const App = {
           }
         );
       } else if (status) {
-        status.textContent = `Pemindai Code 39 belum termuat. Masukkan ID barang secara manual.${torchHint}`;
+        status.textContent = "Pemindai belum termuat. Masukkan ID barang secara manual.";
       }
     } catch (err) {
       this.stopCameraScanner();
@@ -1136,12 +1265,15 @@ const App = {
   },
 
   getFilteredAssetsByBuilding() {
-    if (this.selectedBuilding === "Semua") return this.assets;
-    return this.assets.filter((a) => (a.gedung || "").toLowerCase() === this.selectedBuilding.toLowerCase());
+    return this.assets.filter((asset) => {
+      return this.selectedBuilding === "Semua"
+        || (asset.gedung || "").toLowerCase() === this.selectedBuilding.toLowerCase();
+    });
   },
 
   getBuildingOptions() {
     const additionalBuildings = [
+      ...this.buildings.map((building) => building.name),
       ...this.assets.map((asset) => asset.gedung),
       ...this.rooms.map((room) => room.gedung)
     ]
@@ -1149,11 +1281,27 @@ const App = {
     return [...new Set([...BUILDINGS, ...additionalBuildings])];
   },
 
+  getFloorsForBuilding(buildingName) {
+    const building = this.buildings.find((item) => item.name.toLowerCase() === buildingName.toLowerCase());
+    const floors = [
+      ...(building && Array.isArray(building.floors) ? building.floors : []),
+      ...(BUILDINGS.includes(buildingName) ? ["Lantai 1"] : []),
+      ...this.assets
+        .filter((asset) => asset.gedung === buildingName)
+        .map((asset) => this.getAssetFloor(asset)),
+      ...this.rooms
+        .filter((room) => room.gedung === buildingName)
+        .map((room) => this.normalizeFloorName(room.lantai))
+    ].map((floor) => this.normalizeFloorName(floor)).filter(Boolean);
+    return [...new Set(floors)].sort((a, b) => a.localeCompare(b, "id", { numeric: true }));
+  },
+
   renderDashboardStats() {
     const list = this.getFilteredAssetsByBuilding();
     const rooms = new Set(list.filter((asset) => asset.ruangan).map((asset) => this.fnfRoomKey(asset)));
     this.rooms.forEach((room) => {
-      if (this.selectedBuilding === "Semua" || room.gedung === this.selectedBuilding) {
+      const matchesBuilding = this.selectedBuilding === "Semua" || room.gedung === this.selectedBuilding;
+      if (matchesBuilding) {
         rooms.add(this.fnfRoomKey(room));
       }
     });
@@ -1162,7 +1310,9 @@ const App = {
     document.getElementById("stat-assets").textContent = totalQty.toLocaleString("id-ID");
     document.getElementById("room-count-label").textContent = `${rooms.size.toLocaleString("id-ID")} ruangan`;
     document.getElementById("building-caption").textContent =
-      this.selectedBuilding === "Semua" ? "SEMUA GEDUNG" : `${this.selectedBuilding.toUpperCase()} / LANTAI 1`;
+      this.selectedBuilding === "Semua"
+        ? "SEMUA GEDUNG"
+        : this.selectedBuilding.toUpperCase();
   },
 
   renderBuildingFilter() {
@@ -1173,10 +1323,7 @@ const App = {
       (b) =>
         `<button type="button" class="chip ${this.selectedBuilding === b ? "active" : ""}" data-building="${this.escapeHTML(b)}" aria-pressed="${this.selectedBuilding === b}">${this.escapeHTML(b.replace("Gedung ", "Gd. "))}</button>`
     ).join("");
-    const options = document.getElementById("room-building-options");
-    if (options) {
-      options.innerHTML = buildings.map((building) => `<option value="${this.escapeHTML(building)}"></option>`).join("");
-    }
+    this.renderRoomBuildingOptions();
   },
 
   selectBuilding(building) {
@@ -1187,19 +1334,45 @@ const App = {
     this.renderFNF();
   },
 
+  renderRoomBuildingOptions(preferredBuilding = "") {
+    const select = document.getElementById("room-building");
+    if (!select) return;
+    const buildings = this.getBuildingOptions();
+    const current = preferredBuilding || select.value || this.selectedBuilding;
+    select.innerHTML = buildings.map((building) =>
+      `<option value="${this.escapeHTML(building)}">${this.escapeHTML(building)}</option>`
+    ).join("");
+    select.value = buildings.includes(current) ? current : buildings[0] || "";
+    this.renderRoomFloorOptions();
+  },
+
+  renderRoomFloorOptions(preferredFloor = "") {
+    const building = document.getElementById("room-building")?.value;
+    const select = document.getElementById("room-floor");
+    if (!select) return;
+    const currentFloor = preferredFloor || select.value;
+    const floors = this.getFloorsForBuilding(building || "");
+    select.innerHTML = floors.map((floor) =>
+      `<option value="${this.escapeHTML(floor)}">${this.escapeHTML(floor)}</option>`
+    ).join("");
+    select.value = floors.includes(currentFloor) ? currentFloor : floors[0] || "";
+  },
+
   normalizeBuildingName(value) {
     const cleaned = String(value || "").trim().replace(/\s+/g, " ");
     if (!cleaned) return "";
     const match = cleaned.match(/^(?:gedung|gd\.?)\s*(.*)$/i);
-    return `Gedung ${match ? match[1].trim() : cleaned}`.trim();
+    const name = match ? match[1].trim() : cleaned;
+    return name ? `Gedung ${name}` : "";
   },
 
   normalizeFloorName(value) {
     const cleaned = String(value || "").trim().replace(/\s+/g, " ");
     if (!cleaned) return "";
-    return /^lantai\b/i.test(cleaned)
-      ? cleaned.replace(/^lantai\b\s*/i, "Lantai ")
-      : `Lantai ${cleaned}`;
+    const floor = /^lantai\b/i.test(cleaned)
+      ? cleaned.replace(/^lantai\b\s*/i, "").trim()
+      : cleaned;
+    return floor ? `Lantai ${floor}` : "";
   },
 
   getAssetFloor(item) {
@@ -1249,6 +1422,157 @@ const App = {
       }).join("");
   },
 
+  renderBuildingManagement() {
+    const list = document.getElementById("building-admin-list");
+    if (!list) return;
+    if (!this.buildings.length) {
+      list.innerHTML = `<p class="room-admin-empty">Belum ada gedung tersimpan di Firebase.</p>`;
+      return;
+    }
+
+    list.innerHTML = [...this.buildings]
+      .sort((a, b) => a.name.localeCompare(b.name, "id"))
+      .map((building) => {
+        const floors = this.getFloorsForBuilding(building.name);
+        return `
+          <section class="building-admin-item">
+            <div class="building-admin-heading">
+              <strong>${this.escapeHTML(building.name)}</strong>
+              <div class="building-admin-actions">
+                <button type="button" class="btn-icon-square btn-icon-edit" data-building-action="rename-building" data-building-id="${this.escapeHTML(building.id)}" aria-label="Ubah nama ${this.escapeHTML(building.name)}">Ubah</button>
+                <button type="button" class="btn-icon-square btn-icon-delete" data-building-action="delete-building" data-building-id="${this.escapeHTML(building.id)}" aria-label="Hapus ${this.escapeHTML(building.name)}">Hapus</button>
+              </div>
+            </div>
+            <div class="building-floor-list">
+              ${floors.map((floor) => `
+                <div class="building-floor-item">
+                  <span>${this.escapeHTML(floor)}</span>
+                  <div class="building-admin-actions">
+                    <button type="button" class="building-text-action" data-building-action="rename-floor" data-building-id="${this.escapeHTML(building.id)}" data-floor="${this.escapeHTML(floor)}">Ubah</button>
+                    <button type="button" class="building-text-action is-danger" data-building-action="delete-floor" data-building-id="${this.escapeHTML(building.id)}" data-floor="${this.escapeHTML(floor)}">Hapus</button>
+                  </div>
+                </div>
+              `).join("")}
+            </div>
+          </section>`;
+      }).join("");
+  },
+
+  async handleBuildingManagementAction(event) {
+    const button = event.target.closest("button[data-building-action]");
+    if (!button || !this.currentUser || this.currentUser.role !== "admin") return;
+    const building = this.buildings.find((item) => item.id === button.dataset.buildingId);
+    if (!building) return;
+    const status = document.getElementById("building-form-status");
+    const action = button.dataset.buildingAction;
+
+    try {
+      if (action === "rename-building") {
+        const value = prompt("Nama gedung baru:", building.name);
+        if (value === null) return;
+        const newName = this.normalizeBuildingName(value);
+        if (!newName) throw new Error("Nama gedung wajib diisi.");
+        if (this.buildings.some((item) => item.id !== building.id && item.name.toLowerCase() === newName.toLowerCase())) {
+          throw new Error("Nama gedung tersebut sudah digunakan.");
+        }
+        const oldName = building.name;
+        await SyncService.renameBuilding(building, newName);
+        building.name = newName;
+        this.assets.forEach((asset) => {
+          if (asset.gedung !== oldName) return;
+          asset.gedung = newName;
+          if (typeof asset.lokasi === "string" && asset.lokasi.startsWith(oldName)) {
+            asset.lokasi = `${newName}${asset.lokasi.slice(oldName.length)}`;
+          }
+        });
+        this.rooms.forEach((room) => {
+          if (room.gedung === oldName) room.gedung = newName;
+        });
+        if (this.selectedBuilding === oldName) this.selectedBuilding = newName;
+        status.textContent = `Nama gedung diperbarui menjadi ${newName}.`;
+      } else if (action === "delete-building") {
+        const inUse = this.assets.some((asset) => asset.gedung === building.name)
+          || this.rooms.some((room) => room.gedung === building.name);
+        if (inUse) {
+          throw new Error("Gedung masih digunakan oleh aset atau ruangan. Pindahkan datanya terlebih dahulu.");
+        }
+        if (!confirm(`Hapus ${building.name} beserta daftar lantainya?`)) return;
+        await SyncService.deleteBuilding(building.id);
+        this.buildings = this.buildings.filter((item) => item.id !== building.id);
+        if (this.selectedBuilding === building.name) {
+          this.selectedBuilding = "Semua";
+        }
+        status.textContent = `${building.name} berhasil dihapus.`;
+      } else {
+        const oldFloor = button.dataset.floor;
+        if (!oldFloor) return;
+        const nextFloors = [...(building.floors || [])];
+        const floorIndex = nextFloors.findIndex((floor) => this.normalizeFloorName(floor) === oldFloor);
+        if (floorIndex < 0) return;
+
+        if (action === "rename-floor") {
+          const value = prompt("Nama lantai baru:", oldFloor);
+          if (value === null) return;
+          const newFloor = this.normalizeFloorName(value);
+          if (newFloor === "Lantai " || !newFloor.trim()) throw new Error("Nama lantai wajib diisi.");
+          if (nextFloors.some((floor, index) => index !== floorIndex
+            && this.normalizeFloorName(floor).toLowerCase() === newFloor.toLowerCase())) {
+            throw new Error("Nama lantai tersebut sudah digunakan.");
+          }
+          nextFloors[floorIndex] = newFloor;
+          await SyncService.renameFloor(building, oldFloor, newFloor, nextFloors);
+          building.floors = nextFloors;
+          this.assets.forEach((asset) => {
+            if (asset.gedung !== building.name || this.getAssetFloor(asset) !== oldFloor) return;
+            asset.lantai = newFloor;
+            if (typeof asset.lokasi === "string" && /lantai\s*[^·,-]+/i.test(asset.lokasi)) {
+              asset.lokasi = asset.lokasi.replace(/lantai\s*[^·,-]+/i, newFloor);
+            } else {
+              asset.lokasi = `${building.name} · ${newFloor}`;
+            }
+          });
+          this.rooms.forEach((room) => {
+            if (room.gedung === building.name && this.normalizeFloorName(room.lantai) === oldFloor) {
+              room.lantai = newFloor;
+            }
+          });
+          status.textContent = `${building.name} · ${oldFloor} berhasil diubah menjadi ${newFloor}.`;
+        } else if (action === "delete-floor") {
+          const inUse = this.assets.some((asset) => asset.gedung === building.name && this.getAssetFloor(asset) === oldFloor)
+            || this.rooms.some((room) => room.gedung === building.name && this.normalizeFloorName(room.lantai) === oldFloor);
+          if (inUse) {
+            throw new Error("Lantai masih digunakan oleh aset atau ruangan. Pindahkan datanya terlebih dahulu.");
+          }
+          if (nextFloors.length <= 1) {
+            throw new Error("Setiap gedung harus memiliki minimal satu lantai.");
+          }
+          if (!confirm(`Hapus ${oldFloor} dari ${building.name}?`)) return;
+          const updatedBuilding = {
+            ...building,
+            floors: nextFloors.filter((_, index) => index !== floorIndex),
+            updatedAt: new Date().toISOString()
+          };
+          await SyncService.saveBuilding(updatedBuilding);
+          building.floors = updatedBuilding.floors;
+          status.textContent = `${oldFloor} berhasil dihapus dari ${building.name}.`;
+        }
+      }
+      localStorage.setItem("sarpras_buildings", JSON.stringify(this.buildings));
+      this.persistAssets();
+      this.persistRooms();
+      this.renderBuildingManagement();
+      this.renderBuildingFilter();
+      this.renderRoomBuildingOptions();
+      this.renderAssetLocationOptions();
+      this.renderRoomManagement();
+      this.renderDashboardStats();
+      this.renderFNF();
+      this.renderInventory();
+    } catch (error) {
+      status.textContent = `Perubahan gedung/lantai gagal: ${error.message}`;
+    }
+  },
+
   renderAssetLocationOptions(preferredAsset = null) {
     const locationSelect = document.getElementById("f-gedung");
     if (!locationSelect) return;
@@ -1261,6 +1585,9 @@ const App = {
       if (!locations.has(key)) locations.set(key, location);
     };
     BUILDINGS.forEach((building) => addLocation(building, "Lantai 1"));
+    this.buildings.forEach((building) => {
+      (building.floors || []).forEach((floor) => addLocation(building.name, floor));
+    });
     this.assets.forEach((asset) => addLocation(asset.gedung, this.getAssetFloor(asset)));
     this.rooms.forEach((room) => addLocation(room.gedung, room.lantai));
 
@@ -1650,23 +1977,46 @@ const App = {
       return;
     }
 
-    contentEl.innerHTML = roomsArr
-      .map(
-        (r) => `
-        <button type="button" class="room-card" data-room-key="${this.escapeHTML(r.key)}">
-          <div class="room-icon-box">
-            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M3 21h18M5 21V6l7-3 7 3v15M9 9h.01M15 9h.01M9 13h.01M15 13h.01M10 21v-4h4v4"/>
-            </svg>
-          </div>
-          <div class="room-info-meta">
-            <strong>${this.escapeHTML(r.ruangan)}</strong>
-            <small>${this.escapeHTML(r.gedung)} · ${this.escapeHTML(r.lantai)} · ${r.qty.toLocaleString("id-ID")} aset</small>
-          </div>
-          <span class="room-chevron-icon">›</span>
-        </button>`
-      )
-      .join("");
+    const locationGroups = new Map();
+    roomsArr.forEach((entry) => {
+      const floor = this.normalizeFloorName(entry.lantai);
+      const groupKey = `${entry.gedung}::${floor}`;
+      if (!locationGroups.has(groupKey)) locationGroups.set(groupKey, []);
+      locationGroups.get(groupKey).push({ ...entry, lantai: floor });
+    });
+    const sortedGroups = [...locationGroups.entries()].sort(([first], [second]) => {
+      const [firstBuilding, firstFloor] = first.split("::");
+      const [secondBuilding, secondFloor] = second.split("::");
+      return firstBuilding.localeCompare(secondBuilding, "id", { numeric: true })
+        || firstFloor.localeCompare(secondFloor, "id", { numeric: true });
+    });
+    contentEl.innerHTML = sortedGroups.map(([groupKey, groupedRooms]) => {
+      const [building, floor] = groupKey.split("::");
+      const roomCards = groupedRooms
+        .sort((a, b) => a.ruangan.localeCompare(b.ruangan, "id"))
+        .map((r) => `
+          <button type="button" class="room-card" data-room-key="${this.escapeHTML(r.key)}">
+            <div class="room-icon-box">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M3 21h18M5 21V6l7-3 7 3v15M9 9h.01M15 9h.01M9 13h.01M15 13h.01M10 21v-4h4v4"/>
+              </svg>
+            </div>
+            <div class="room-info-meta">
+              <strong>${this.escapeHTML(r.ruangan)}</strong>
+              <small>${r.qty.toLocaleString("id-ID")} aset</small>
+            </div>
+            <span class="room-chevron-icon">›</span>
+          </button>
+        `).join("");
+      return `
+        <section class="room-location-group" aria-labelledby="room-location-${this.escapeHTML(groupKey)}">
+          <h3 class="room-location-heading" id="room-location-${this.escapeHTML(groupKey)}">
+            <span>${this.escapeHTML(building)} / ${this.escapeHTML(floor)}</span>
+          </h3>
+          <div class="room-location-list">${roomCards}</div>
+        </section>
+      `;
+    }).join("");
   },
 
   toggleCategoryExpand(catId) {
@@ -2389,6 +2739,7 @@ const App = {
     document.getElementById("managed-uid").value = "";
     document.getElementById("managed-password").required = true;
     document.getElementById("managed-password-hint").textContent = "(wajib untuk akun baru)";
+    document.getElementById("btn-delete-managed-user").classList.add("hidden");
     document.getElementById("user-form-panel").open = true;
     document.getElementById("managed-name").focus();
   },
@@ -2409,6 +2760,10 @@ const App = {
       document.getElementById("managed-password").value = "";
       document.getElementById("managed-password").required = false;
       document.getElementById("managed-password-hint").textContent = "(kosongkan jika tidak diubah)";
+      document.getElementById("btn-delete-managed-user").classList.toggle(
+        "hidden",
+        target.id === (this.currentUser.uid || this.currentUser.id)
+      );
       document.getElementById("user-form-panel").open = true;
     } catch (error) {
       alert(`Data akun gagal dimuat: ${error.message}`);
@@ -2416,9 +2771,17 @@ const App = {
   },
 
   async removeUser(id) {
+    if (!this.currentUser || this.currentUser.role !== "admin" || id === (this.currentUser.uid || this.currentUser.id)) {
+      return;
+    }
     if (!confirm("Hapus akun pengguna ini?")) return;
     try {
       await AuthService.deleteUserAccount(id);
+      if (document.getElementById("managed-uid").value === id) {
+        document.getElementById("user-crud-form").reset();
+        document.getElementById("managed-uid").value = "";
+        document.getElementById("user-form-panel").open = false;
+      }
       await this.renderManagedUsers();
     } catch (error) {
       alert(`Akun gagal dihapus: ${error.message}`);

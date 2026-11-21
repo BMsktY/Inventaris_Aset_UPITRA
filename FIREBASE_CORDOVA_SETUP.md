@@ -37,13 +37,21 @@ firebase deploy --only firestore:rules,firestore:indexes,functions
 
 Fungsi callable `adminUpsertUser` dan `adminDeleteUser` memakai Firebase Admin SDK di server sehingga kata sandi dan operasi Firebase Authentication tidak dilakukan oleh klien. Jangan memberi aplikasi hak menulis langsung ke dokumen peran pengguna.
 
-Untuk deploy hanya dua fungsi Admin terbaru:
+Untuk deploy fungsi Admin dengan dukungan CORS bagi browser web dan Cordova:
 
 ```powershell
-npx firebase-tools deploy --only functions:adminUpsertUser,functions:adminDeleteUser --project sistem-inventaris-aset
+npm install -g firebase-tools
+firebase login
+firebase deploy --only functions --project sistem-inventaris-aset
 ```
 
-Jika browser menolak endpoint Cloud Functions dengan pesan CORS, deployment fungsi baru wajib dijalankan terlebih dahulu. Browser tidak boleh dianggap menunda validasi akun; pemanggilan Functions baru akan mengirim header CORS sebelum pengguna membuat akun.
+Jika browser menolak endpoint Cloud Functions dengan pesan CORS, deployment fungsi terbaru wajib dijalankan terlebih dahulu. Pastikan project yang dipilih benar dan `adminUpsertUser` serta `adminDeleteUser` selesai di-deploy; kemudian muat ulang aplikasi. Browser tidak boleh dianggap menunda validasi Admin: kedua fungsi tetap memverifikasi role Admin dari Firestore.
+
+Data master gedung disimpan di `buildings/{buildingId}` dengan field `name` dan `floors` (daftar nama lantai). Admin dapat menambah, mengubah, dan menghapus gedung/lantai; nama yang sudah dipakai aset atau ruangan ikut diperbarui saat diubah, sedangkan penghapusan lokasi yang masih dipakai ditolak. Deploy rules terbaru agar aplikasi dapat membaca dan mengelola koleksi tersebut:
+
+```powershell
+firebase deploy --only firestore:rules --project sistem-inventaris-aset
+```
 
 ## 3. Pindahkan data prototipe lokal
 
@@ -81,6 +89,8 @@ Web dan Cordova memakai decoder Code 39 ZXing yang dibundel lokal. Plugin `cordo
 
 - `users/{uid}` — profil dan peran akun.
 - `assets/{assetId}` — data inventaris.
+- `buildings/{buildingId}` — nama gedung dan daftar lantai.
+- `rooms/{roomId}` — nama ruangan, gedung, dan lantai.
 - `reports/{reportId}` — laporan privat dan balasan Admin.
 - `scans/{scanId}` — histori pemindaian.
 - `loginHistory/{entryId}` — histori masuk.
