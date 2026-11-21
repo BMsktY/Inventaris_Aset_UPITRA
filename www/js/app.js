@@ -623,15 +623,25 @@ const App = {
         e.target.reset();
         document.getElementById("user-form-panel").open = false;
         document.getElementById("managed-uid").value = "";
+        document.getElementById("managed-password").required = true;
+        document.getElementById("managed-password-hint").textContent = "(wajib untuk akun baru)";
         this.renderManagedUsers();
       } catch (error) {
-        alert(error.message);
+        const message = error.code === "functions/unavailable"
+          || error.message.includes("CORS")
+          || error.message.includes("Failed to fetch")
+          ? "Koneksi ke fungsi Admin gagal. Deploy fungsi terbaru, lalu muat ulang halaman."
+          : error.message;
+        document.getElementById("user-form-panel").open = true;
+        alert(`Akun tidak dapat disimpan: ${message}`);
       }
     });
 
     document.getElementById("btn-user-new").addEventListener("click", () => {
       document.getElementById("user-crud-form").reset();
       document.getElementById("managed-uid").value = "";
+      document.getElementById("managed-password").required = true;
+      document.getElementById("managed-password-hint").textContent = "(wajib untuk akun baru)";
     });
   },
 
@@ -2367,7 +2377,9 @@ const App = {
         </div>
       `).join("");
     } catch (err) {
-      console.warn("Gagal memuat pengguna:", err);
+      const listEl = document.getElementById("managed-users-list");
+      if (listEl) listEl.textContent = `Daftar akun gagal dimuat: ${err.message}`;
+      console.error("Gagal memuat pengguna.", err);
     }
   },
 
@@ -2375,27 +2387,42 @@ const App = {
     const form = document.getElementById("user-crud-form");
     if (form) form.reset();
     document.getElementById("managed-uid").value = "";
+    document.getElementById("managed-password").required = true;
+    document.getElementById("managed-password-hint").textContent = "(wajib untuk akun baru)";
     document.getElementById("user-form-panel").open = true;
     document.getElementById("managed-name").focus();
   },
 
   async prefillUserForm(id) {
-    const users = await AuthService.getAllUsers();
-    const target = users.find((u) => u.id === id);
-    if (!target) return;
-    document.getElementById("managed-uid").value = target.id;
-    document.getElementById("managed-name").value = target.name || "";
-    document.getElementById("managed-email").value = target.email || "";
-    document.getElementById("managed-unit").value = target.unit || "";
-    document.getElementById("managed-role").value = target.role || "user";
-    document.getElementById("managed-password").value = "";
-    document.getElementById("user-form-panel").open = true;
+    try {
+      const users = await AuthService.getAllUsers();
+      const target = users.find((u) => u.id === id);
+      if (!target) {
+        alert("Akun tidak ditemukan.");
+        return;
+      }
+      document.getElementById("managed-uid").value = target.id;
+      document.getElementById("managed-name").value = target.name || "";
+      document.getElementById("managed-email").value = target.email || "";
+      document.getElementById("managed-unit").value = target.unit || "";
+      document.getElementById("managed-role").value = target.role || "user";
+      document.getElementById("managed-password").value = "";
+      document.getElementById("managed-password").required = false;
+      document.getElementById("managed-password-hint").textContent = "(kosongkan jika tidak diubah)";
+      document.getElementById("user-form-panel").open = true;
+    } catch (error) {
+      alert(`Data akun gagal dimuat: ${error.message}`);
+    }
   },
 
   async removeUser(id) {
     if (!confirm("Hapus akun pengguna ini?")) return;
-    await AuthService.deleteUserAccount(id);
-    this.renderManagedUsers();
+    try {
+      await AuthService.deleteUserAccount(id);
+      await this.renderManagedUsers();
+    } catch (error) {
+      alert(`Akun gagal dihapus: ${error.message}`);
+    }
   },
 
   // 10 · Tambah aset
@@ -2557,7 +2584,7 @@ if (window.cordova) {
       : "[Integrasi] Cordova siap; Firebase belum siap.");
   }, { once: true });
 } else {
-  console.info("[Cordova] Tidak terdeteksi; aplikasi berjalan di browser.");
+  console.info("[Runtime] Mode browser aktif; plugin Cordova tidak digunakan.");
 }
 
 document.addEventListener("DOMContentLoaded", () => App.init());

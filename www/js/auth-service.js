@@ -43,12 +43,12 @@ const AuthService = {
 
   getLoginErrorMessage(error) {
     const messages = {
-      "auth/invalid-credential": "Email atau kata sandi salah, atau akun belum dibuat di Firebase Authentication. Periksa juga apakah metode Email/Password sudah diaktifkan.",
-      "auth/invalid-login-credentials": "Email atau kata sandi salah, atau akun belum dibuat di Firebase Authentication. Periksa juga apakah metode Email/Password sudah diaktifkan.",
-      "auth/user-not-found": "Akun belum terdaftar di Firebase Authentication.",
-      "auth/wrong-password": "Kata sandi Firebase tidak sesuai.",
-      "auth/operation-not-allowed": "Login Email/Password belum diaktifkan di Firebase Console.",
-      "auth/network-request-failed": "Tidak dapat menghubungi Firebase. Periksa koneksi internet perangkat.",
+      "auth/invalid-credential": "Email atau kata sandi salah.",
+      "auth/invalid-login-credentials": "Email atau kata sandi salah.",
+      "auth/user-not-found": "Akun belum terdaftar.",
+      "auth/wrong-password": "Kata sandi tidak sesuai.",
+      "auth/operation-not-allowed": "Login Email/Password belum diaktifkan.",
+      "auth/network-request-failed": "Tidak dapat terhubung. Periksa koneksi internet perangkat.",
       "auth/too-many-requests": "Terlalu banyak percobaan login. Tunggu sebentar lalu coba lagi."
     };
     return messages[error.code] || error.message || "Terjadi kesalahan saat login.";
@@ -85,26 +85,19 @@ const AuthService = {
     const snapshot = await FirebaseService.db.collection("users").doc(user.uid).get();
     if (!snapshot.exists) {
       await FirebaseService.auth.signOut();
-      throw new Error("Profil akun belum tersedia. Hubungi Admin untuk menyiapkan akses.");
-    }
-    const profile = snapshot.data();
-    if (!["admin", "user"].includes(profile.role)) {
-      await FirebaseService.auth.signOut();
-      throw new Error("Peran akun tidak valid. Hubungi Admin.");
+      throw new Error(`Profil users/${user.uid} belum tersedia di Firestore.`);
     }
 
-    const historySnapshot = await FirebaseService.db.collection("loginHistory")
-      .where("uid", "==", user.uid)
-      .orderBy("timestamp", "desc")
-      .limit(20)
-      .get();
-    const loginHistory = historySnapshot.docs.map((doc) => {
-      const entry = doc.data();
-      return {
-        timestamp: entry.timestamp,
-        device: entry.device || "Aplikasi"
-      };
-    });
+    const profile = snapshot.data();
+    if (profile.uid && profile.uid !== user.uid) {
+      await FirebaseService.auth.signOut();
+      throw new Error("UID profil Firestore tidak cocok dengan akun Firebase.");
+    }
+    if (!["admin", "user"].includes(profile.role)) {
+      await FirebaseService.auth.signOut();
+      throw new Error("Role profil Firestore harus bernilai admin atau user.");
+    }
+
     const session = {
       uid: user.uid,
       id: user.uid,
@@ -112,7 +105,7 @@ const AuthService = {
       email: user.email,
       unit: profile.unit || "",
       role: profile.role,
-      loginHistory
+      loginHistory: []
     };
     localStorage.setItem(this.sessionKey, JSON.stringify(session));
     return session;
@@ -135,9 +128,32 @@ const AuthService = {
         timestamp: new Date().toISOString(),
         device: /Android|iPhone|iPad/i.test(navigator.userAgent) || window.cordova ? "Mobile" : "Web"
       };
-      await FirebaseService.db.collection("loginHistory").add(loginEntry);
-      console.info("[Firebase] Login, pembacaan profil, dan pencatatan Firestore berhasil.");
-      session.loginHistory = [loginEntry, ...(session.loginHistory || [])].slice(0, 20);
+      try {
+        const historySnapshot = await FirebaseService.db.collection("loginHistory")
+          .where("uid", "==", credential.user.uid)
+          .orderBy("timestamp", "desc")
+          .limit(20)
+          .get();
+        session.loginHistory = historySnapshot.docs.map((doc) => {
+          const entry = doc.data();
+          return {
+            timestamp: entry.timestamp,
+            device: entry.device || "Aplikasi"
+          };
+        });
+      } catch (error) {
+        console.warn(
+          `[Firebase Auth] Riwayat masuk tidak dapat dimuat; login tetap dilanjutkan (${error.code || "firestore/unknown"}).`
+        );
+      }
+      try {
+        await FirebaseService.db.collection("loginHistory").add(loginEntry);
+        session.loginHistory = [loginEntry, ...(session.loginHistory || [])].slice(0, 20);
+      } catch (error) {
+        console.warn(
+          `[Firebase Auth] Riwayat masuk tidak dapat disimpan; login tetap dilanjutkan (${error.code || "firestore/unknown"}).`
+        );
+      }
       localStorage.setItem(this.sessionKey, JSON.stringify(session));
       return session;
     }

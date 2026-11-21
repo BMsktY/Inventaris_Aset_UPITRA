@@ -58,13 +58,7 @@ const FirebaseService = (() => {
   }
 
   if (app && auth && db && functions) {
-    console.info("[Firebase] SDK dan layanan siap; koneksi server divalidasi saat permintaan berhasil.", {
-      projectId: app.options.projectId,
-      auth: true,
-      firestore: true,
-      functions: true,
-      storage: Boolean(storage)
-    });
+    console.info(`[Firebase] SDK siap untuk proyek ${app.options.projectId}; koneksi diverifikasi saat operasi data berhasil.`);
   }
 
   return {

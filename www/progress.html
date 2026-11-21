@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#087DBB" />
+  <title>Status Integrasi - Inventaris Sarpras UPITRA</title>
+  <link rel="stylesheet" href="css/progress.css" />
+</head>
+<body>
+  <main class="progress-page">
+    <header class="page-header">
+      <a class="back-link" href="/">← Kembali ke aplikasi</a>
+      <p class="eyebrow">INVENTARIS SARPRAS · UPITRA</p>
+      <h1>Status integrasi</h1>
+      <p class="intro">Pantau kesiapan API, aplikasi web, Firebase, dan Cordova.</p>
+    </header>
+
+    <section class="summary-card" aria-labelledby="summary-title">
+      <div class="summary-topline">
+        <div>
+          <h2 id="summary-title">Progress kesiapan</h2>
+          <p id="summary-status" role="status" aria-live="polite">Memeriksa API…</p>
+        </div>
+        <strong id="progress-value" class="progress-value">—</strong>
+      </div>
+      <div
+        id="progress-track"
+        class="progress-track"
+        role="progressbar"
+        aria-label="Kesiapan integrasi"
+        aria-valuemin="0"
+        aria-valuemax="100"
+        aria-valuenow="0">
+        <span id="progress-fill"></span>
+      </div>
+      <p id="progress-note" class="note"></p>
+    </section>
+
+    <section aria-labelledby="checks-title">
+      <div class="section-heading">
+        <h2 id="checks-title">Komponen</h2>
+        <button id="refresh-button" type="button">Periksa lagi</button>
+      </div>
+      <div id="check-list" class="check-list" aria-live="polite">
+        <p class="loading">Memuat status integrasi…</p>
+      </div>
+      <p id="last-checked" class="last-checked"></p>
+    </section>
+
+    <section class="api-card" aria-labelledby="api-title">
+      <h2 id="api-title">Endpoint pemantauan</h2>
+      <p><code>GET /api/health</code> — status API</p>
+      <p><code>GET /api/progress</code> — status berkas integrasi</p>
+      <p class="note">Data inventaris tetap dikelola langsung oleh Firebase SDK dan dilindungi Firestore Security Rules.</p>
+    </section>
+  </main>
+  <script src="js/progress.js"></script>
+</body>
+</html>

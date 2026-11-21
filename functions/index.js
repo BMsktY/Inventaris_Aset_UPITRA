@@ -37,7 +37,10 @@ function validateProfile(data) {
   }
 }
 
-exports.adminUpsertUser = onCall(async (request) => {
+exports.adminUpsertUser = onCall({
+  cors: true,
+  region: "us-central1"
+}, async (request) => {
   await requireAdmin(request);
   const data = request.data || {};
   validateProfile(data);
@@ -105,7 +108,10 @@ exports.adminUpsertUser = onCall(async (request) => {
   return { uid: userRecord.uid };
 });
 
-exports.adminDeleteUser = onCall(async (request) => {
+exports.adminDeleteUser = onCall({
+  cors: true,
+  region: "us-central1"
+}, async (request) => {
   await requireAdmin(request);
   const uid = request.data && request.data.uid;
   if (typeof uid !== "string" || !uid || uid === request.auth.uid) {
