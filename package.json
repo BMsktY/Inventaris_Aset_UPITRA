@@ -1,0 +1,45 @@
+{
+  "name": "inventaris-sarpras-upitra",
+  "version": "1.0.0",
+  "description": "Sistem Inventaris Sarpras UPITRA — prototipe web mobile-first",
+  "main": "index.js",
+  "scripts": {
+    "prestart": "npm run build:client",
+    "start": "node server.js",
+    "prestart:watch": "npm run build:client",
+    "start:watch": "live-server www --port=8000",
+    "start:lan": "node server.js",
+    "build:firebase": "esbuild www/js/firebase-sdk-entry.js --bundle --minify --format=iife --outfile=www/js/firebase-sdk.js",
+    "build:scanner": "esbuild www/js/zxing-scanner-entry.js --bundle --minify --format=iife --outfile=www/js/zxing-scanner.js",
+    "build:client": "npm run build:firebase && npm run build:scanner",
+    "cordova:android:add": "cordova platform add android",
+    "precordova:android:prepare": "npm run build:client",
+    "cordova:android:prepare": "cordova prepare android",
+    "precordova:android:build": "npm run build:client",
+    "cordova:android:build": "cordova build android",
+    "precordova:android:run": "npm run build:client",
+    "cordova:android:run": "cordova run android"
+  },
+  "dependencies": {
+    "@zxing/browser": "^0.2.1",
+    "@zxing/library": "^0.23.0",
+    "firebase": "^12.6.0"
+  },
+  "devDependencies": {
+    "cordova": "^13.0.0",
+    "cordova-android": "^15.1.0",
+    "cordova-plugin-camera": "^8.0.0",
+    "esbuild": "^0.25.0",
+    "live-server": "^1.2.2"
+  },
+  "cordova": {
+    "platforms": [
+      "android"
+    ],
+    "plugins": {
+      "cordova-plugin-camera": {
+        "ANDROIDX_CORE_VERSION": "1.6.+"
+      }
+    }
+  }
+}

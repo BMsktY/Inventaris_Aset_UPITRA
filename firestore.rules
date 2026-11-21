@@ -1,0 +1,100 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return signedIn()
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin";
+    }
+
+    match /users/{uid} {
+      allow get: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow list: if isAdmin();
+      allow create, update, delete: if false;
+    }
+
+    match /assets/{assetId} {
+      allow read: if signedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /rooms/{roomId} {
+      allow read: if signedIn();
+      allow create, update: if isAdmin()
+        && request.resource.data.keys().hasOnly([
+          "name", "gedung", "lantai", "kode", "createdAt", "createdByUid"
+        ])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.gedung is string
+        && request.resource.data.lantai is string
+        && request.resource.data.kode is string
+        && request.resource.data.createdAt is string
+        && request.resource.data.createdByUid == request.auth.uid;
+      allow delete: if isAdmin();
+    }
+
+    match /reports/{reportId} {
+      allow read: if isAdmin() || (signedIn() && resource.data.senderUid == request.auth.uid);
+      allow create: if signedIn()
+        && (isAdmin() || request.resource.data.senderUid == request.auth.uid)
+        && request.resource.data.keys().hasOnly([
+          "senderUid", "senderName", "senderEmail", "targetRole", "room",
+          "assetId", "assetItemId", "assetCode", "assetName", "assetLocation",
+          "assetArea", "assetPhoto", "message", "feedback", "feedbackAt", "createdAt"
+        ])
+        && request.resource.data.senderUid is string
+        && request.resource.data.room is string
+        && request.resource.data.message is string
+        && request.resource.data.feedback is string
+        && request.resource.data.createdAt is string
+        && (isAdmin() || (request.resource.data.feedback == ""
+          && !("feedbackAt" in request.resource.data)))
+        && (!("assetId" in request.resource.data) || request.resource.data.assetId is string)
+        && (!("assetItemId" in request.resource.data) || request.resource.data.assetItemId is string)
+        && (!("assetCode" in request.resource.data) || request.resource.data.assetCode is string)
+        && (!("assetName" in request.resource.data) || request.resource.data.assetName is string)
+        && (!("assetLocation" in request.resource.data) || request.resource.data.assetLocation is string)
+        && (!("assetArea" in request.resource.data) || request.resource.data.assetArea is string)
+        && (!("assetPhoto" in request.resource.data) || request.resource.data.assetPhoto is string)
+        && (!("feedbackAt" in request.resource.data) || request.resource.data.feedbackAt is string);
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(["feedback", "feedbackAt"])
+        && request.resource.data.feedback is string
+        && request.resource.data.feedbackAt is string;
+      allow delete: if isAdmin();
+    }
+
+    match /scans/{scanId} {
+      allow read: if isAdmin() || (signedIn() && resource.data.scannedByUid == request.auth.uid);
+      allow create: if signedIn()
+        && request.resource.data.scannedByUid == request.auth.uid
+        && request.resource.data.assetId is string
+        && request.resource.data.scannedBy is string
+        && request.resource.data.scannerRole in ["admin", "user"]
+        && request.resource.data.scannedAt is string
+        && request.resource.data.rawInput is string
+        && request.resource.data.matchedIdBarang is string
+        && request.resource.data.keys().hasOnly([
+          "assetId", "scannedByUid", "scannedBy", "scannerRole",
+          "scannedAt", "rawInput", "matchedIdBarang"
+        ])
+        && exists(/databases/$(database)/documents/assets/$(request.resource.data.assetId));
+      allow update, delete: if false;
+    }
+
+    match /loginHistory/{entryId} {
+      allow read: if isAdmin() || (signedIn() && resource.data.uid == request.auth.uid);
+      allow create: if signedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.timestamp is string
+        && request.resource.data.device is string
+        && request.resource.data.keys().hasOnly(["uid", "timestamp", "device"]);
+      allow update, delete: if false;
+    }
+  }
+}

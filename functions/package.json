@@ -1,0 +1,12 @@
+{
+  "name": "upitra-inventory-functions",
+  "description": "Secure Firebase callable functions for inventory account administration",
+  "main": "index.js",
+  "engines": {
+    "node": "22"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.0.0",
+    "firebase-functions": "^6.3.2"
+  }
+}

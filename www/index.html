@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' data: gap: https://ssl.gstatic.com https://*.googleapis.com https://*.firebaseio.com 'unsafe-eval' 'unsafe-inline'; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.cloudfunctions.net; style-src 'self' 'unsafe-inline'; media-src *; img-src 'self' data: content: https:;" />
+  <meta name="theme-color" content="#087DBB" />
+  <title>Sistem Inventaris Sarpras - UPITRA</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="login-storage-status" class="login-storage-status hidden" role="status" aria-live="polite"></div>
+
+  <!-- LAYAR 01: LOGIN -->
+  <section id="view-login" class="container login-container">
+    <div class="login-header-group">
+      <img src="img/logo-upitra.png" alt="Logo UPITRA" class="login-logo" />
+      <h1 class="login-app-title">SISTEM INVENTARIS KAMPUS</h1>
+    </div>
+
+    <div class="login-welcome-block">
+      <h2 class="login-title">Selamat datang kembali</h2>
+      <p class="login-subtitle">Universitas Pignatelli Triputra</p>
+    </div>
+
+    <form id="login-form" class="login-form">
+      <div class="form-group">
+        <label for="login-email">Email kampus</label>
+        <div class="input-icon-wrapper">
+          <svg class="input-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+            <polyline points="22,6 12,13 2,6"/>
+          </svg>
+          <input type="email" id="login-email" placeholder="nama@upt.ac.id" required autocomplete="username" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="login-password">Kata sandi</label>
+        <div class="input-icon-wrapper">
+          <svg class="input-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+          <input type="password" id="login-password" placeholder="Masukkan kata sandi" required autocomplete="current-password" />
+          <button type="button" id="btn-toggle-password" class="password-toggle-btn" aria-label="Lihat kata sandi">
+            <svg id="icon-eye-show" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+            <svg id="icon-eye-hide" class="hidden" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+              <line x1="1" y1="1" x2="23" y2="23"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <button type="submit" class="btn btn-primary btn-submit-login">Masuk</button>
+    </form>
+    <p id="login-error" class="login-error-text" role="alert"></p>
+
+    <div class="login-help-text">
+      Butuh akun? Hubungi admin Sarpras.
+    </div>
+
+    <details class="demo-accounts">
+      <summary>Akun demo & informasi akses</summary>
+      <div class="demo-accounts-body">
+        <div class="demo-account-item">
+          <div>
+            <strong>Admin:</strong> <code>admin@upitra.ac.id</code> / <code>admin123</code>
+          </div>
+          <button type="button" class="btn-demo-fill" onclick="document.getElementById('login-email').value='admin@upitra.ac.id'; document.getElementById('login-password').value='admin123';">Gunakan</button>
+        </div>
+        <div class="demo-account-item" style="margin-top:6px;">
+          <div>
+            <strong>Pengguna (Bima):</strong> <code>bima@upt.ac.id</code> / <code>bima123</code>
+          </div>
+          <button type="button" class="btn-demo-fill" onclick="document.getElementById('login-email').value='bima@upt.ac.id'; document.getElementById('login-password').value='bima123';">Gunakan</button>
+        </div>
+        <div class="demo-account-item" style="margin-top:6px;">
+          <div>
+            <strong>Pengguna (Staff):</strong> <code>staff@upitra.ac.id</code> / <code>staff123</code>
+          </div>
+          <button type="button" class="btn-demo-fill" onclick="document.getElementById('login-email').value='staff@upitra.ac.id'; document.getElementById('login-password').value='staff123';">Gunakan</button>
+        </div>
+        <p class="demo-note">Akun demo hanya berfungsi saat Firebase belum dikonfigurasi. Klik "Gunakan" untuk mengisi form.</p>
+      </div>
+    </details>
+
+    <div class="login-campus-footer">
+      Universitas Pignatelli Triputra
+    </div>
+  </section>
+
+  <!-- SHELL APLIKASI SETELAH LOGIN -->
+  <div id="app-shell" class="hidden">
+    <header class="topbar">
+      <div class="brand-lockup">
+        <img src="img/logo-upitra.png" alt="Logo UPITRA" />
+        <div>
+          <div class="brand-kicker">SARPRAS</div>
+          <div class="topbar-title" id="header-title">Inventaris kampus</div>
+        </div>
+      </div>
+
+      <button id="btn-header-back" class="header-back hidden" type="button" aria-label="Kembali ke beranda">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+        <span id="header-page-title"></span>
+      </button>
+
+      <div class="topbar-actions">
+        <span id="header-admin-badge" class="header-role-badge admin-only hidden">Admin</span>
+        <button id="btn-notif" class="icon-btn notif-btn" title="Notifikasi Pesan" aria-label="Notifikasi pesan">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+            <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+          </svg>
+          <span id="notif-dot" class="badge-dot hidden"></span>
+        </button>
+      </div>
+    </header>
+
+    <main class="container app-content-container">
+      <div id="storage-status" class="storage-status hidden" role="status" aria-live="polite"></div>
+      <div id="migration-actions" class="migration-actions hidden">
+        <p>Data lokal hanya ada di perangkat ini. Firebase belum berisi inventaris atau laporan.</p>
+        <button id="btn-migrate-local" type="button" class="btn btn-secondary">Pindahkan data lokal ke Firebase</button>
+      </div>
+
+      <!-- TAB 1: DASHBOARD & FNF (02 · Beranda, 03 · Aset per ruangan, 04 · Detail aset) -->
+      <section id="tab-dashboard" class="tab-view">
+        <div id="dashboard-main-view">
+          <div class="welcome-block">
+            <h1 id="dashboard-greeting">Selamat pagi, Admin</h1>
+            <p>Data aset Universitas Pignatelli Triputra teridentifikasi</p>
+          </div>
+          <div class="stats-grid">
+            <div class="stat-card stat-card-primary">
+              <div class="stat-heading">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z"/>
+                  <path d="m4.5 7.8 7.5 4.4 7.5-4.4M12 12.2V21"/>
+                </svg>
+                <span>Aset terdata</span>
+              </div>
+              <div class="stat-value" id="stat-assets">1.248</div>
+            </div>
+            <div class="stat-card stat-card-secondary">
+              <div class="stat-heading">
+                <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="4" y="3" width="10" height="18" rx="1.5"/>
+                  <path d="M14 8h5a1.5 1.5 0 0 1 1.5 1.5V21"/>
+                  <path d="M8 7h2M8 11h2M8 15h2"/>
+                  <path d="M17 12h1M17 16h1"/>
+                </svg>
+                <span>Ruangan teridentifikasi</span>
+              </div>
+              <div class="stat-value" id="stat-rooms">42</div>
+            </div>
+          </div>
+
+          <button id="dashboard-search-shortcut" class="dashboard-search" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.3"/><path d="m16 16 4.2 4.2"/></svg>
+            <span>Cari nama atau kode aset</span>
+          </button>
+
+          <div class="section-heading">
+            <h2>Jelajahi ruangan</h2>
+            <span id="room-count-label">42 ruangan</span>
+          </div>
+          <div class="building-filter" id="building-filter"></div>
+          <div id="building-caption" class="building-caption">GEDUNG 6 / LANTAI 1</div>
+        </div>
+
+        <div id="fnf-breadcrumb" class="fnf-breadcrumb"></div>
+        <div id="fnf-content" class="fnf-content"></div>
+        <p class="dashboard-footnote">Data contoh untuk rancangan antarmuka</p>
+      </section>
+
+      <!-- TAB KHUSUS ADMIN: DATA INVENTARIS (09 · Kelola inventaris) -->
+      <section id="tab-inventory" class="tab-view hidden">
+        <div class="page-intro">
+          <h1>Kelola aset Sarpras</h1>
+          <p>Data terpusat, pencatatan lebih mudah.</p>
+        </div>
+        <div class="card room-management-card admin-only">
+          <div class="section-heading room-management-heading">
+            <div>
+              <h2>Kelola ruangan</h2>
+              <p>Tambahkan ruangan beserta gedung dan lantainya.</p>
+            </div>
+            <span id="room-admin-count">0 ruangan</span>
+          </div>
+          <form id="room-form">
+            <div class="form-group">
+              <label for="room-name">Nama ruangan *</label>
+              <input type="text" id="room-name" placeholder="Contoh: Laboratorium Biologi" required maxlength="100" />
+            </div>
+            <div class="form-row-2col">
+              <div class="form-group">
+                <label for="room-building">Gedung *</label>
+                <input type="text" id="room-building" list="room-building-options" value="Gedung 6" required maxlength="60" />
+                <datalist id="room-building-options"></datalist>
+              </div>
+              <div class="form-group">
+                <label for="room-floor">Lantai *</label>
+                <input type="text" id="room-floor" value="Lantai 1" placeholder="Contoh: Lantai 2" required maxlength="60" />
+              </div>
+            </div>
+            <button type="submit" class="btn btn-primary room-submit-button">Tambah ruangan</button>
+            <p id="room-form-status" class="room-form-status" role="status" aria-live="polite"></p>
+          </form>
+          <div id="room-admin-list" class="room-admin-list"></div>
+        </div>
+        <div class="inventory-summary">
+          <div><strong id="inventory-total">1.248</strong><span>Total aset</span></div>
+          <div><strong id="inventory-maintenance">42</strong><span>Dalam maintenance</span></div>
+        </div>
+        <div class="inventory-actions">
+          <button type="button" class="btn btn-card-action" id="btn-inventory-print-label" onclick="App.openBatchPrintLabel()">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+            <span>Cetak label</span>
+          </button>
+        </div>
+        <div class="search-bar search-bar-inventory">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.3"/><path d="m16 16 4.2 4.2"/></svg>
+          <input id="inventory-search" class="inventory-search" type="search" placeholder="Cari nama atau kode aset" />
+        </div>
+        <div class="inventory-filter" id="inventory-status-filter">
+          <button class="chip active" type="button" data-status="">Semua</button>
+          <button class="chip" type="button" data-status="Baik">Baik</button>
+          <button class="chip" type="button" data-status="Maintenance">Maintenance</button>
+          <button class="chip" type="button" data-status="Rusak">Rusak</button>
+          <button class="chip" type="button" data-status="Hilang">Hilang</button>
+        </div>
+        <div class="section-heading section-heading-inventory">
+          <h2>Aset terbaru</h2>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span id="inventory-count"></span>
+            <button type="button" class="btn btn-primary btn-add-pill" onclick="App.openAddAsset()">+ Tambah</button>
+          </div>
+        </div>
+        <div id="inventory-list"></div>
+      </section>
+
+      <!-- TAB 2: PENCARIAN MANUAL (05 · Pencarian) -->
+      <section id="tab-search" class="tab-view hidden">
+        <div class="search-bar search-bar-focus-blue">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.3"/><path d="m16 16 4.2 4.2"/></svg>
+          <input type="search" id="search-input" aria-label="Cari aset" placeholder="Cari nama, ID, atau lokasi aset" />
+          <button type="button" id="btn-clear-search" aria-label="Hapus pencarian">×</button>
+        </div>
+        <div class="search-filters">
+          <div class="search-filters-chips">
+            <span class="chip-filter-pill" id="search-building-badge">Gedung 6</span>
+            <span class="chip-filter-pill chip-pill-white">Semua status</span>
+          </div>
+          <div class="search-room-select-wrap">
+            <label class="sr-only" for="search-room-filter">Filter ruangan</label>
+            <select id="search-room-filter">
+              <option value="">Semua Ruangan</option>
+            </select>
+            <svg class="filter-slider-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <line x1="4" y1="21" x2="4" y2="14"/>
+              <line x1="4" y1="10" x2="4" y2="3"/>
+              <line x1="12" y1="21" x2="12" y2="12"/>
+              <line x1="12" y1="8" x2="12" y2="3"/>
+              <line x1="20" y1="21" x2="20" y2="16"/>
+              <line x1="20" y1="12" x2="20" y2="3"/>
+              <line x1="1" y1="14" x2="7" y2="14"/>
+              <line x1="9" y1="8" x2="15" y2="8"/>
+              <line x1="17" y1="16" x2="23" y2="16"/>
+            </svg>
+          </div>
+        </div>
+        <div class="section-heading"><h2>Hasil pencarian</h2><span id="search-count"></span></div>
+        <div id="search-results"></div>
+        <div class="search-history">
+          <div class="section-heading"><h2>Pencarian terakhir</h2><button id="btn-clear-history" type="button">Hapus</button></div>
+          <div id="search-history-list"></div>
+          <div class="search-hint-banner">
+            Cari dengan nama barang, ID, atau lokasi.
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 3: SCAN BARCODE (06 · Scan barcode) -->
+      <section id="tab-scan" class="tab-view hidden">
+        <div class="scan-intro-block">
+          <h2 class="scan-page-title">Pindai barcode aset</h2>
+          <p class="scan-page-subtitle">Posisikan barcode di dalam bingkai pemindaian.</p>
+        </div>
+
+        <div class="scan-viewport-container">
+          <div class="scan-viewport" id="scan-viewport">
+            <video id="scan-camera-video" class="scan-camera-video-stream hidden" playsinline muted></video>
+
+            <div id="scan-camera-indicator" class="scan-camera-indicator is-inactive" role="status" aria-live="polite">
+              <span class="scan-camera-status-dot" aria-hidden="true"></span>
+              <span class="scan-camera-indicator-label">KAMERA NONAKTIF</span>
+            </div>
+
+            <div class="scan-corner-bracket top-left"></div>
+            <div class="scan-corner-bracket top-right"></div>
+            <div class="scan-corner-bracket bottom-left"></div>
+            <div class="scan-corner-bracket bottom-right"></div>
+
+            <div id="scan-idle-placeholder" class="scan-idle-placeholder">
+              <svg viewBox="0 0 24 24" aria-hidden="true" class="scan-idle-icon">
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                <circle cx="12" cy="13" r="4"/>
+              </svg>
+              <span>Kamera pemindai siap</span>
+              <small>Klik "Buka kamera" untuk memindai langsung</small>
+            </div>
+
+            <button type="button" id="btn-flash-toggle" class="scan-flash-btn hidden" aria-label="Lampu flash tidak didukung" title="Lampu flash belum tersedia" disabled aria-pressed="false">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            </button>
+          </div>
+          <p id="scan-camera-status" class="topbar-sub" style="text-align:center; margin-top:6px;" aria-live="polite"></p>
+        </div>
+
+        <div class="card scan-input-card">
+          <label for="scan-raw-input" class="form-label-bold">Input / Hasil Barcode</label>
+          <div class="form-group" style="margin-bottom: 8px;">
+            <input type="text" id="scan-raw-input" placeholder="Contoh: PRYT.MFHL.01 atau INV.SRPS..." />
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button id="btn-process-scan" class="btn btn-primary" style="flex: 2;">Lihat detail aset</button>
+            <button id="btn-camera-capture" class="btn btn-secondary btn-camera-toggle" style="flex: 1;" aria-pressed="false">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 5h-3l-2 2H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2-2Z"/><circle cx="12" cy="13" r="3"/></svg>
+              <span id="camera-button-label">Buka kamera</span>
+            </button>
+          </div>
+        </div>
+
+        <div id="scan-result-box"></div>
+      </section>
+
+      <!-- TAB 4: PELAPORAN & KOMENTAR (07 · Laporan pribadi / Admin Inbox) -->
+      <section id="tab-reports" class="tab-view hidden">
+        <!-- Tampilan Kotak Masuk untuk Admin -->
+        <div id="admin-reports-view" class="admin-only hidden">
+          <div class="page-intro">
+            <h1>Kotak Masuk Laporan</h1>
+            <p>Daftar kendala dan laporan aset dari pengguna kampus.</p>
+          </div>
+          <div class="inventory-filter" style="margin-bottom: 12px;">
+            <button class="chip active" id="filter-rep-all" type="button" onclick="App.filterAdminReports('all')">Semua</button>
+            <button class="chip" id="filter-rep-pending" type="button" onclick="App.filterAdminReports('pending')">Perlu Ditangani</button>
+            <button class="chip" id="filter-rep-handled" type="button" onclick="App.filterAdminReports('handled')">Ditangani</button>
+          </div>
+          <div id="admin-reports-list" class="admin-reports-list"></div>
+        </div>
+
+        <!-- Tampilan Percakapan Laporan (Untuk Pengguna atau Admin saat membuka salah satu laporan) -->
+        <div id="report-chat-view">
+          <div id="admin-chat-back-bar" class="hidden" style="margin-bottom: 10px;">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="App.backToAdminReportList()" style="display:inline-flex; align-items:center; gap:6px;">
+              ← Kembali ke Daftar Laporan
+            </button>
+          </div>
+
+          <div class="report-privacy user-only">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+            <p>Hanya Anda dan admin yang dapat melihat percakapan ini.</p>
+          </div>
+
+          <div class="room-context-card" id="report-room-badge-card">
+            <div class="room-context-info">
+              <div class="room-context-name" id="report-context-room-title">Multi Function Hall</div>
+              <div class="room-context-sub" id="report-context-room-sub">Gedung 6 · Lantai 1</div>
+            </div>
+            <span class="room-context-arrow">›</span>
+          </div>
+
+          <!-- Banner Aset yang Dilaporkan (Jika diklik dari Detail Aset) -->
+          <div id="report-attached-asset-banner" class="report-attached-asset hidden">
+            <div class="attached-asset-icon-box" id="report-attached-icon">
+              📦
+            </div>
+            <div class="attached-asset-info">
+              <strong id="report-attached-name">Proyektor</strong>
+              <small id="report-attached-meta">PRYT.MFHL.01 · Multi Function Hall</small>
+            </div>
+            <button type="button" class="btn-clear-attached" onclick="App.clearReportAttachedAsset()" title="Batal kaitkan aset">×</button>
+          </div>
+
+          <div class="date-divider-pill" id="report-date-divider">Hari ini</div>
+
+          <div id="reports-timeline" class="reports-timeline"></div>
+
+          <!-- Form Kirim Pesan Laporan -->
+          <div id="report-compose-card" class="card report-compose-card">
+            <form id="report-form" class="report-chat-form">
+              <!-- Hidden contextual fields -->
+              <input type="hidden" id="report-room" value="Multi Function Hall" />
+              <input type="hidden" id="report-asset-id" value="" />
+              <input type="hidden" id="report-asset-item-id" value="" />
+              <input type="hidden" id="report-asset-code" value="" />
+              <input type="hidden" id="report-asset-name" value="" />
+              <input type="hidden" id="report-asset-location" value="" />
+              <input type="hidden" id="report-asset-area" value="" />
+              <input type="hidden" id="report-asset-photo" value="" />
+
+              <div class="report-input-row">
+                <input type="text" id="report-message" placeholder="Tulis laporan / komentar kondisi aset..." required autocomplete="off" />
+                <button type="submit" class="btn-chat-send" aria-label="Kirim laporan">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <div id="admin-reply-compose" class="card report-compose-card admin-only hidden">
+          <form id="admin-reply-form" class="report-chat-form">
+            <div class="report-input-row">
+              <input type="text" id="admin-reply-message" placeholder="Tulis balasan untuk pelapor..." required autocomplete="off" />
+              <button type="submit" class="btn-chat-send" aria-label="Kirim balasan">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+              </button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <!-- TAB 5: PROFIL PENGGUNA & KELOLA AKUN (08 · Profil pengguna, 12 · Kelola akun) -->
+      <section id="tab-profile" class="tab-view hidden">
+        <!-- Tampilan untuk Pengguna Biasa -->
+        <div id="profile-card" class="card user-only"></div>
+
+        <!-- Tampilan untuk Admin: Kelola akun pengguna -->
+        <div id="admin-user-management" class="admin-only hidden">
+          <div class="page-intro">
+            <h1>Akun pengguna</h1>
+            <p>Hanya admin yang mengatur akses.</p>
+          </div>
+          <div class="inventory-summary account-summary">
+            <div>
+              <strong id="account-total">24 akun aktif</strong>
+              <span id="account-users-detail">2 admin · 22 pengguna</span>
+            </div>
+            <div class="account-summary-icon">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>
+            </div>
+          </div>
+          <div class="search-bar search-bar-inventory">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.3"/><path d="m16 16 4.2 4.2"/></svg>
+            <input id="managed-users-search" class="inventory-search" type="search" placeholder="Cari nama atau email pengguna" />
+          </div>
+          <div class="inventory-filter" id="managed-users-filter">
+            <button class="chip active" type="button" data-role="">Semua</button>
+            <button class="chip" type="button" data-role="user">Pengguna</button>
+            <button class="chip" type="button" data-role="admin">Admin</button>
+          </div>
+          <div class="section-heading">
+            <h2>Daftar akun</h2>
+            <button type="button" class="btn btn-primary btn-add-pill" onclick="App.openUserForm()">+ Tambah akun</button>
+          </div>
+          <div id="managed-users-list"></div>
+
+          <details id="user-form-panel" class="user-form-panel">
+            <summary>Tambah atau ubah akun</summary>
+            <form id="user-crud-form">
+              <input type="hidden" id="managed-uid" />
+              <div class="form-group">
+                <label for="managed-name">Nama Lengkap</label>
+                <input type="text" id="managed-name" required />
+              </div>
+              <div class="form-group">
+                <label for="managed-email">Email</label>
+                <input type="email" id="managed-email" required />
+              </div>
+              <div class="form-group">
+                <label for="managed-password">Kata Sandi <span id="managed-password-hint">(wajib untuk akun baru)</span></label>
+                <input type="password" id="managed-password" minlength="6" autocomplete="new-password" required />
+              </div>
+              <div class="form-group">
+                <label for="managed-unit">Unit / Fakultas / Biro</label>
+                <input type="text" id="managed-unit" placeholder="Contoh: FEB / Sarana dan Prasarana" required />
+              </div>
+              <div class="form-group">
+                <label for="managed-role">Peran</label>
+                <select id="managed-role">
+                  <option value="user">Pengguna</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+              <button type="submit" class="btn btn-primary">Simpan Akun Pengguna</button>
+              <button type="button" id="btn-user-new" class="btn btn-secondary">Tambah Akun Baru</button>
+            </form>
+          </details>
+          <p class="admin-footnote">Akun dibuat dan dikelola oleh admin.</p>
+        </div>
+
+        <button id="btn-logout" class="btn btn-logout-action">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          <span>Keluar dari akun</span>
+        </button>
+        <p class="app-version-footer">Sistem Inventaris Sarpras · Versi 1.0</p>
+      </section>
+
+      <!-- MODAL / PANEL FORM TAMBAH & EDIT ASET (10 · Tambah aset) -->
+      <section id="panel-asset-form" class="tab-view hidden">
+        <div class="card no-print form-asset-card">
+          <form id="asset-form">
+            <input type="hidden" id="asset-doc-id" />
+            
+            <div class="form-group">
+              <label for="f-nama">Nama barang *</label>
+              <input type="text" id="f-nama" placeholder="Proyektor" required />
+            </div>
+
+            <div class="form-group">
+              <label for="f-kat">Kategori akun keuangan (KAT) *</label>
+              <select id="f-kat-select" onchange="document.getElementById('f-kat').value = this.value">
+                <option value="61 - Fixed Assets Installation (DC)">61 - Fixed Assets Installation (DC)</option>
+                <option value="62 - Furniture & Fixtures">62 - Furniture & Fixtures</option>
+                <option value="63 - Electronic Equipment">63 - Electronic Equipment</option>
+                <option value="64 - Computer Equipment">64 - Computer Equipment</option>
+                <option value="65 - Office Equipment">65 - Office Equipment</option>
+              </select>
+              <input type="hidden" id="f-kat" value="61 - Fixed Assets Installation (DC)" />
+            </div>
+
+            <div class="form-row-2col">
+              <div class="form-group">
+                <label for="f-biro">Biro pemilik *</label>
+                <select id="f-biro-select" onchange="document.getElementById('f-biro').value = this.value">
+                  <option value="213 - Sarpras">213 - Sarpras</option>
+                  <option value="214 - Akademik">214 - Akademik</option>
+                  <option value="215 - IT & Jaringan">215 - IT & Jaringan</option>
+                </select>
+                <input type="hidden" id="f-biro" value="213 - Sarpras" />
+              </div>
+              <div class="form-group">
+                <label for="f-qty">Qty *</label>
+                <input type="number" id="f-qty" min="1" max="500" value="1" required />
+              </div>
+            </div>
+
+            <div class="form-row-2col">
+              <div class="form-group">
+                <label for="f-tgl">Tanggal pembelian *</label>
+                <input type="date" id="f-tgl" value="2026-02-15" required />
+              </div>
+              <div class="form-group">
+                <label for="f-id-barang">Kode jenis barang *</label>
+                <input type="text" id="f-id-barang" placeholder="PRYT" required />
+              </div>
+            </div>
+
+            <div class="form-row-2col">
+              <div class="form-group">
+                <label for="f-gedung">Lokasi *</label>
+                <select id="f-gedung" required></select>
+              </div>
+              <div class="form-group">
+                <label for="f-ruangan">Area penempatan *</label>
+                <select id="f-ruangan-select" required></select>
+                <input type="hidden" id="f-ruangan" value="" />
+                <input type="hidden" id="f-area" value="" />
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>Status barang *</label>
+              <div class="status-chip-selector" id="status-chip-selector">
+                <button type="button" class="status-chip active" data-val="Baik">Baik</button>
+                <button type="button" class="status-chip" data-val="Maintenance">Maintenance</button>
+                <button type="button" class="status-chip" data-val="Rusak">Rusak</button>
+                <button type="button" class="status-chip" data-val="Hilang">Hilang</button>
+              </div>
+              <input type="hidden" id="f-status" value="Baik" />
+            </div>
+
+            <div class="form-group">
+              <label>Foto barang</label>
+              <div class="photo-upload-preview-card">
+                <div class="photo-thumb-wrap">
+                  <img id="photo-thumb-img" class="hidden" alt="Foto aset" />
+                  <svg id="photo-thumb-placeholder" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z"/>
+                    <path d="m4.5 7.8 7.5 4.4 7.5-4.4M12 12.2V21"/>
+                  </svg>
+                </div>
+                <div class="photo-details">
+                  <strong id="photo-name-label">Foto bukti belum tersedia</strong>
+                  <span id="photo-meta-label">Ikon barang digunakan sebagai pengganti foto.</span>
+                </div>
+              </div>
+              <div class="photo-capture-actions">
+                <button type="button" class="btn btn-secondary" id="btn-photo-camera">Ambil foto</button>
+                <button type="button" class="btn btn-secondary" id="btn-photo-library">Pilih dari galeri</button>
+              </div>
+              <input type="file" id="asset-photo-file" class="hidden" accept="image/*" />
+              <p id="asset-photo-status" class="photo-action-status" role="status" aria-live="polite"></p>
+              <input type="hidden" id="f-foto-url" value="" />
+              <input type="hidden" id="f-kode" value="INV.SRPS.61.213.0226.PRYT.MFHL.0003" />
+            </div>
+
+            <div class="auto-identity-card">
+              <div class="auto-id-kicker">IDENTITAS OTOMATIS</div>
+              <div class="auto-id-code" id="preview-auto-id">PRYT.MFHL.03</div>
+              <div class="auto-id-fullcode" id="preview-auto-fullcode">INV.SRPS.61.213.0226.PRYT.MFHL.0003</div>
+              <p class="auto-id-note">Nomor urut mengikuti data terakhir.</p>
+            </div>
+
+            <div class="info-save-notice">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              <span>Menambahkan data maupun mengedit data barang akan tersimpan di database.</span>
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-submit-asset">Simpan aset</button>
+          </form>
+        </div>
+      </section>
+
+      <!-- PANEL CETAK LABEL BARCODE (11 · Cetak label) -->
+      <section id="panel-print-label" class="tab-view hidden">
+        <div class="page-intro no-print">
+          <h1>Cetak label aset</h1>
+          <p>Logo kampus dan kode inventaris.</p>
+        </div>
+
+        <div class="selected-assets-card no-print">
+          <div class="selected-assets-info">
+            <strong id="print-selected-title">2 aset · Proyektor</strong>
+            <small id="print-selected-sub">PRYT.MFHL.01 - PRYT.MFHL.02</small>
+          </div>
+          <div class="selected-assets-check">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+          </div>
+          <button type="button" class="btn-link-action" onclick="App.closePrintLabel()">Ubah pilihan</button>
+        </div>
+
+        <div class="section-heading no-print">
+          <h2>Pratinjau label</h2>
+          <span class="preview-pager-badge" id="preview-pager-badge">1 dari 2</span>
+        </div>
+
+        <div id="sticker-preview-container"></div>
+
+        <div class="form-row-2col no-print" style="margin-top: 14px;">
+          <div class="form-group">
+            <label for="label-size-select">Kertas</label>
+            <select id="label-size-select" onchange="App.updateLabelSize()">
+              <option value="A4" selected>A4 · Label 100mm x 25mm</option>
+              <option value="50mm x 12.5mm">50mm x 12,5mm</option>
+              <option value="70mm x 17.5mm">70mm x 17,5mm</option>
+              <option value="100mm x 25mm">100mm x 25mm</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="label-copies-input">Jumlah salinan / aset</label>
+            <input type="number" id="label-copies-input" min="1" max="100" value="1" />
+          </div>
+        </div>
+
+        <div class="info-card-blue no-print">
+          <svg class="info-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+          <div>
+            <strong>Barcode inventaris</strong>
+            <p>Label dapat dipindai untuk melihat informasi barang.</p>
+          </div>
+        </div>
+
+        <div class="no-print" style="margin-top: 16px;">
+          <button class="btn btn-primary btn-submit-asset" onclick="window.print()">Unduh/Cetak label</button>
+        </div>
+      </section>
+    </main>
+
+    <!-- BOTTOM NAVIGATION BAR (5 Menu Utama) -->
+    <nav class="bottom-nav no-print">
+      <button class="nav-btn active" data-tab="tab-dashboard">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+          <polyline points="9 22 9 12 15 12 15 22"/>
+        </svg>
+        <span>Beranda</span>
+      </button>
+
+      <button class="nav-btn" id="nav-secondary" data-user-tab="tab-search" data-admin-tab="tab-inventory">
+        <svg class="icon-nav-user" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.3"/><path d="m16 16 4.2 4.2"/></svg>
+        <svg class="icon-nav-admin hidden" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z"/><path d="m4.5 7.8 7.5 4.4 7.5-4.4M12 12.2V21"/></svg>
+        <span id="nav-secondary-label">Cari</span>
+      </button>
+
+      <button class="nav-btn nav-scan-highlight" data-tab="tab-scan">
+        <div class="scan-circle">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M8 4H5a1 1 0 0 0-1 1v3m12-4h3a1 1 0 0 1 1 1v3M4 16v3a1 1 0 0 0 1 1h3m12-4v3a1 1 0 0 1-1 1h-3M8 8h8v8H8z"/>
+            <path d="M10 10v4m2-4v4m2-4v4"/>
+          </svg>
+        </div>
+        <span>Scan</span>
+      </button>
+
+      <button class="nav-btn" data-tab="tab-reports">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+        </svg>
+        <span>Laporan</span>
+      </button>
+
+      <button class="nav-btn" data-tab="tab-profile">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+          <circle cx="12" cy="7" r="4"/>
+        </svg>
+        <span id="nav-profile-label">Profil</span>
+      </button>
+    </nav>
+  </div>
+
+  <script>
+    if (window.location.protocol === "file:") {
+      document.write('<script src="cordova.js"><\/script>');
+    }
+  </script>
+  <script src="js/firebase-sdk.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script src="js/auth-service.js"></script>
+  <script src="js/scan-service.js"></script>
+  <script src="js/zxing-scanner.js"></script>
+  <script src="js/sync-service.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
