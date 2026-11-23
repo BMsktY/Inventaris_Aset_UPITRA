@@ -58,6 +58,9 @@ const App = {
   selectedUnitSeq: null,
   adminReportsFilter: "all",
   adminActiveReportId: null,
+  userActiveReportId: null,
+  reportDraftAssetId: null,
+  markingReportReads: new Set(),
   activeLabelAsset: null,
   activeLabelUnitCode: null,
   cameraStream: null,
@@ -253,6 +256,9 @@ const App = {
       this.currentUser = null;
       this.reports = [];
       this.adminActiveReportId = null;
+      this.userActiveReportId = null;
+      this.reportDraftAssetId = null;
+      this.markingReportReads.clear();
       this.selectedUnitCode = null;
       this.selectedUnitSeq = null;
       this.fnfState = { room: null, categoryName: null, selectedAssetId: null };
@@ -306,8 +312,8 @@ const App = {
 
     // Notification Button
     document.getElementById("btn-notif").addEventListener("click", () => {
-      this.updateNotification(true);
       this.switchTab("tab-reports");
+      this.renderReportsTimeline();
     });
 
     // Search Input & Filters
@@ -437,7 +443,17 @@ const App = {
         alert("Silakan masuk terlebih dahulu untuk mengirim laporan.");
         return;
       }
-      const room = document.getElementById("report-room")?.value.trim() || "Multi Function Hall";
+      if (this.currentUser.role !== "user" || !this.reportDraftAssetId) {
+        alert("Pilih aset yang sudah teridentifikasi sebelum mengirim laporan.");
+        return;
+      }
+      const asset = this.assets.find((item) => item.id === this.reportDraftAssetId);
+      if (!asset) {
+        alert("Aset tidak ditemukan. Pilih kembali aset yang akan dilaporkan.");
+        this.clearReportAttachedAsset();
+        return;
+      }
+      const room = document.getElementById("report-room")?.value.trim() || asset.ruangan || "";
       const assetId = document.getElementById("report-asset-id")?.value.trim() || "";
       const assetItemId = document.getElementById("report-asset-item-id")?.value.trim() || "";
       const assetCode = document.getElementById("report-asset-code")?.value.trim() || "";
@@ -447,12 +463,18 @@ const App = {
       const assetPhoto = document.getElementById("report-asset-photo")?.value.trim() || "";
       const message = document.getElementById("report-message").value.trim();
       if (!message) return;
+      if (message.length > 2000) {
+        alert("Pesan laporan maksimal 2.000 karakter.");
+        return;
+      }
 
+      const reportId = "report-" + Date.now();
+      const createdAt = new Date().toISOString();
       const report = {
-        id: "report-" + Date.now(),
-        senderUid: this.currentUser ? this.currentUser.uid : "user-1",
-        senderName: this.currentUser ? (this.currentUser.name || "Bima Sakti") : "Bima Sakti",
-        senderEmail: this.currentUser ? this.currentUser.email : "bima@upt.ac.id",
+        id: reportId,
+        senderUid: this.currentUser.uid,
+        senderName: this.currentUser.name || "Pengguna",
+        senderEmail: this.currentUser.email,
         targetRole: "admin",
         room,
         assetId,
@@ -463,9 +485,18 @@ const App = {
         assetArea,
         assetPhoto,
         message,
+        messages: [{
+          id: `${reportId}-initial`,
+          senderUid: this.currentUser.uid,
+          senderName: this.currentUser.name || "Pengguna",
+          senderRole: "user",
+          text: message,
+          sentAt: createdAt
+        }],
+        adminUnreadCount: 1,
+        userUnreadCount: 0,
         feedback: "",
-        statusBadge: "",
-        createdAt: new Date().toISOString()
+        createdAt
       };
       this.reports.push(report);
       try {
@@ -475,15 +506,25 @@ const App = {
         alert(`Laporan gagal dikirim: ${error.message}`);
         return;
       }
+      this.userActiveReportId = report.id;
+      this.reportDraftAssetId = null;
       this.clearReportAttachedAsset();
       this.renderReportsTimeline();
+      this.updateNotification();
       document.getElementById("report-message").value = "";
     });
 
     document.getElementById("admin-reply-form").addEventListener("submit", async (e) => {
       e.preventDefault();
       if (this.adminActiveReportId) {
-        await this.sendFeedback(this.adminActiveReportId);
+        await this.sendChatMessage(this.adminActiveReportId, "admin-reply-message");
+      }
+    });
+
+    document.getElementById("user-chat-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if (this.userActiveReportId) {
+        await this.sendChatMessage(this.userActiveReportId, "user-chat-message");
       }
     });
 
@@ -731,6 +772,9 @@ const App = {
   async onAuthenticated() {
     const isAdmin = this.currentUser && this.currentUser.role === "admin";
     this.adminActiveReportId = null;
+    this.userActiveReportId = null;
+    this.reportDraftAssetId = null;
+    this.markingReportReads.clear();
     document.body.classList.toggle("role-admin", isAdmin);
 
     const secondaryNav = document.getElementById("nav-secondary");
@@ -839,6 +883,8 @@ const App = {
           this.reports = reports;
           this.renderReportsTimeline();
           this.updateNotification();
+          const activeReportId = isAdmin ? this.adminActiveReportId : this.userActiveReportId;
+          if (activeReportId) this.markReportRead(activeReportId);
         },
         onScans: (scans) => {
           const scansByAsset = new Map();
@@ -865,7 +911,17 @@ const App = {
     }
   },
 
-  updateNotification(markRead = false) {
+  getReportUnreadCount(report, role) {
+    const field = role === "admin" ? "adminUnreadCount" : "userUnreadCount";
+    if (Object.prototype.hasOwnProperty.call(report, field)) {
+      return Math.max(0, Number(report[field]) || 0);
+    }
+    const latestMessage = this.getReportMessages(report).slice(-1)[0];
+    if (role === "admin") return latestMessage && latestMessage.senderRole !== "admin" ? 1 : 0;
+    return latestMessage && latestMessage.senderRole === "admin" ? 1 : 0;
+  },
+
+  updateNotification() {
     const dot = document.getElementById("notif-dot");
     if (!dot) return;
     if (!this.currentUser) {
@@ -874,36 +930,40 @@ const App = {
     }
 
     const userId = this.currentUser.uid || this.currentUser.id;
-    const events = this.currentUser.role === "admin"
-      ? this.reports.map((report) => `report:${report.id || ""}:${report.createdAt || ""}`)
-      : this.reports
-        .filter((report) => report.senderUid === userId && report.feedback)
-        .map((report) => `feedback:${report.id || ""}:${report.feedbackAt || report.feedback}`);
-    const storageKey = `sarpras-notifications-seen-${userId}`;
-    let seenEvents;
-    try {
-      const stored = localStorage.getItem(storageKey);
-      seenEvents = stored === null ? null : JSON.parse(stored);
-      if (!Array.isArray(seenEvents)) throw new Error("Status notifikasi tidak valid.");
-    } catch (error) {
-      console.warn("Status notifikasi tidak dapat dibaca; daftar saat ini ditandai sebagai sudah dilihat.", error);
-      seenEvents = null;
-    }
-
-    if (seenEvents === null) {
-      localStorage.setItem(storageKey, JSON.stringify(events));
-      dot.classList.add("hidden");
-      document.getElementById("btn-notif").setAttribute("aria-label", "Notifikasi pesan");
-      return;
-    }
-
-    const hasUnread = !markRead && events.some((event) => !seenEvents.includes(event));
-    dot.classList.toggle("hidden", !hasUnread);
+    const reports = this.currentUser.role === "admin"
+      ? this.reports
+      : this.reports.filter((report) => report.senderUid === userId);
+    const unreadCount = reports.reduce(
+      (total, report) => total + this.getReportUnreadCount(report, this.currentUser.role),
+      0
+    );
+    dot.textContent = unreadCount > 99 ? "99+" : String(unreadCount);
+    dot.classList.toggle("hidden", unreadCount === 0);
     document.getElementById("btn-notif").setAttribute(
       "aria-label",
-      hasUnread ? "Ada informasi baru" : "Notifikasi pesan"
+      unreadCount > 0 ? `${unreadCount} pesan belum dibaca` : "Notifikasi pesan"
     );
-    if (markRead) localStorage.setItem(storageKey, JSON.stringify(events));
+  },
+
+  async markReportRead(reportId, showError = false) {
+    const report = this.reports.find((item) => item.id === reportId);
+    if (!report || !this.currentUser || this.markingReportReads.has(reportId)) return;
+    const role = this.currentUser.role;
+    if (this.getReportUnreadCount(report, role) === 0) return;
+
+    this.markingReportReads.add(reportId);
+    try {
+      await SyncService.markReportRead(reportId, role);
+      report[role === "admin" ? "adminUnreadCount" : "userUnreadCount"] = 0;
+      localStorage.setItem("sarpras_reports", JSON.stringify(this.reports));
+      this.updateNotification();
+      this.renderReportsTimeline();
+    } catch (error) {
+      console.error("Status baca laporan gagal disimpan.", error);
+      if (showError) alert(`Laporan belum dapat ditandai sudah dibaca: ${error.message}`);
+    } finally {
+      this.markingReportReads.delete(reportId);
+    }
   },
 
   async toggleCameraScanner() {
@@ -2367,68 +2427,73 @@ const App = {
   },
 
   reportFromAsset(assetOrRoom, code) {
-    this.switchTab("tab-reports");
+    if (!this.currentUser || this.currentUser.role !== "user") {
+      alert("Pelaporan kondisi barang tersedia untuk akun pengguna.");
+      return;
+    }
     let asset = null;
     if (typeof assetOrRoom === "object" && assetOrRoom !== null) {
       asset = assetOrRoom;
     } else if (typeof assetOrRoom === "string") {
-      asset = this.assets.find(a => (a.kode === code || a.id_barang === code || a.id === code || a.ruangan === assetOrRoom));
-      if (!asset) {
-        asset = {
-          ruangan: assetOrRoom || "Multi Function Hall",
-          id_barang: code || "PRYT.MFHL.02",
-          nama_barang: "Proyektor",
-          gedung: "Gedung 6",
-          area_penempatan: assetOrRoom || "Multi Function Hall",
-          foto_barang: ""
-        };
-      }
+      asset = this.assets.find((item) =>
+        item.kode === code || item.id_barang === code || item.id === code
+      );
     }
 
-    if (asset) {
-      const rEl = document.getElementById("report-room");
-      const idEl = document.getElementById("report-asset-id");
-      const itemIdEl = document.getElementById("report-asset-item-id");
-      const cEl = document.getElementById("report-asset-code");
-      const nEl = document.getElementById("report-asset-name");
-      const lEl = document.getElementById("report-asset-location");
-      const aEl = document.getElementById("report-asset-area");
-      const pEl = document.getElementById("report-asset-photo");
-
-      if (rEl) rEl.value = asset.ruangan || "Multi Function Hall";
-      if (idEl) idEl.value = asset.id || "";
-      if (itemIdEl) itemIdEl.value = this.selectedUnitCode || asset.id_barang || "";
-      const unitNumber = this.selectedUnitSeq ? Number(this.selectedUnitSeq.split("/")[0]) : 0;
-      const fullCode = asset.kode && unitNumber
-        ? asset.kode.replace(/\.\d{4}$/, `.${String(unitNumber).padStart(4, "0")}`)
-        : asset.kode || "";
-      if (cEl) cEl.value = fullCode;
-      if (nEl) nEl.value = asset.nama_barang || "";
-      if (lEl) lEl.value = asset.lokasi || `${asset.gedung || "Gedung 6"} · Lantai 1`;
-      if (aEl) aEl.value = asset.area_penempatan || asset.ruangan || "Multi Function Hall";
-      if (pEl) pEl.value = asset.foto_barang || "";
-
-      // Show attached asset banner
-      const banner = document.getElementById("report-attached-asset-banner");
-      const nameEl = document.getElementById("report-attached-name");
-      const metaEl = document.getElementById("report-attached-meta");
-      const iconEl = document.getElementById("report-attached-icon");
-      document.getElementById("report-context-room-title").textContent = asset.ruangan || "Laporan aset";
-      document.getElementById("report-context-room-sub").textContent = asset.lokasi || `${asset.gedung || "Gedung 6"} · Lantai 1`;
-      if (banner && nameEl && metaEl) {
-        nameEl.textContent = asset.nama_barang || "Aset Terkait";
-        metaEl.textContent = `${this.selectedUnitCode || asset.id_barang || ""} · ${fullCode}`;
-        if (iconEl) {
-          iconEl.innerHTML = asset.foto_barang
-            ? `<img src="${this.escapeHTML(asset.foto_barang)}" alt="" style="width:36px;height:36px;border-radius:6px;object-fit:cover;" />`
-            : `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z"/><path d="m4.5 7.8 7.5 4.4 7.5-4.4M12 12.2V21"/></svg>`;
-        }
-        banner.classList.remove("hidden");
-      }
+    if (!asset || !asset.id || !this.assets.some((item) => item.id === asset.id)) {
+      alert("Pilih aset yang sudah teridentifikasi dari daftar inventaris terlebih dahulu.");
+      return;
     }
+
+    const rEl = document.getElementById("report-room");
+    const idEl = document.getElementById("report-asset-id");
+    const itemIdEl = document.getElementById("report-asset-item-id");
+    const cEl = document.getElementById("report-asset-code");
+    const nEl = document.getElementById("report-asset-name");
+    const lEl = document.getElementById("report-asset-location");
+    const aEl = document.getElementById("report-asset-area");
+    const pEl = document.getElementById("report-asset-photo");
+
+    if (rEl) rEl.value = asset.ruangan || "";
+    if (idEl) idEl.value = asset.id;
+    if (itemIdEl) itemIdEl.value = this.selectedUnitCode || asset.id_barang || "";
+    const unitNumber = this.selectedUnitSeq ? Number(this.selectedUnitSeq.split("/")[0]) : 0;
+    const fullCode = asset.kode && unitNumber
+      ? asset.kode.replace(/\.\d{4}$/, `.${String(unitNumber).padStart(4, "0")}`)
+      : asset.kode || "";
+    if (cEl) cEl.value = fullCode;
+    if (nEl) nEl.value = asset.nama_barang || "";
+    if (lEl) lEl.value = asset.lokasi || `${asset.gedung || "Gedung 6"} · Lantai 1`;
+    if (aEl) aEl.value = asset.area_penempatan || asset.ruangan || "";
+    if (pEl) pEl.value = asset.foto_barang || "";
+
+    const banner = document.getElementById("report-attached-asset-banner");
+    const nameEl = document.getElementById("report-attached-name");
+    const metaEl = document.getElementById("report-attached-meta");
+    const iconEl = document.getElementById("report-attached-icon");
+    document.getElementById("report-context-room-title").textContent = asset.ruangan || "Laporan aset";
+    document.getElementById("report-context-room-sub").textContent =
+      asset.lokasi || `${asset.gedung || "Gedung 6"} · Lantai 1`;
+    if (banner && nameEl && metaEl) {
+      nameEl.textContent = asset.nama_barang || "Aset teridentifikasi";
+      metaEl.textContent = `${this.selectedUnitCode || asset.id_barang || ""} · ${fullCode}`;
+      if (iconEl) {
+        iconEl.innerHTML = asset.foto_barang
+          ? `<img src="${this.escapeHTML(asset.foto_barang)}" alt="" style="width:36px;height:36px;border-radius:6px;object-fit:cover;" />`
+          : `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z"/><path d="m4.5 7.8 7.5 4.4 7.5-4.4M12 12.2V21"/></svg>`;
+      }
+      banner.classList.remove("hidden");
+    }
+    this.adminActiveReportId = null;
+    this.userActiveReportId = null;
+    this.reportDraftAssetId = asset.id;
+    this.switchTab("tab-reports");
+    this.renderReportsTimeline();
   },
 
   clearReportAttachedAsset() {
+    const wasDraft = Boolean(this.reportDraftAssetId);
+    this.reportDraftAssetId = null;
     const banner = document.getElementById("report-attached-asset-banner");
     if (banner) banner.classList.add("hidden");
     const idEl = document.getElementById("report-asset-id");
@@ -2445,6 +2510,9 @@ const App = {
     if (lEl) lEl.value = "";
     if (aEl) aEl.value = "";
     if (pEl) pEl.value = "";
+    if (wasDraft && this.currentUser && this.currentUser.role === "user") {
+      this.renderReportsTimeline();
+    }
   },
 
   filterAdminReports(filter) {
@@ -2459,6 +2527,13 @@ const App = {
   openAdminReportChat(reportId) {
     this.adminActiveReportId = reportId;
     this.renderReportsTimeline();
+    this.markReportRead(reportId, true);
+  },
+
+  openUserReportChat(reportId) {
+    this.userActiveReportId = reportId;
+    this.renderReportsTimeline();
+    this.markReportRead(reportId, true);
   },
 
   backToAdminReportList() {
@@ -2466,172 +2541,248 @@ const App = {
     this.renderReportsTimeline();
   },
 
-  // 07 · Laporan saya & Admin Inbox
+  backToUserReports() {
+    if (this.reportDraftAssetId) this.clearReportAttachedAsset();
+    this.userActiveReportId = null;
+    this.renderReportsTimeline();
+  },
+
+  getReportMessages(report) {
+    const messages = Array.isArray(report.messages)
+      ? report.messages.filter((message) => message && typeof message.text === "string")
+      : [];
+    const hasInitial = messages.some((message) => message.id === `${report.id}-initial`);
+    const legacyMessages = [];
+    if (report.message && !hasInitial) {
+      legacyMessages.push({
+        id: `${report.id}-initial`,
+        senderUid: report.senderUid,
+        senderName: report.senderName || "Pengguna",
+        senderRole: "user",
+        text: report.message,
+        sentAt: report.createdAt || ""
+      });
+    }
+    if (report.feedback && !messages.some((message) =>
+      message.senderRole === "admin" && message.text === report.feedback
+    )) {
+      legacyMessages.push({
+        id: `${report.id}-feedback`,
+        senderUid: "",
+        senderName: "Admin Sarpras",
+        senderRole: "admin",
+        text: report.feedback,
+        sentAt: report.feedbackAt || report.createdAt || ""
+      });
+    }
+    return [...legacyMessages, ...messages].sort(
+      (first, second) => new Date(first.sentAt || 0) - new Date(second.sentAt || 0)
+    );
+  },
+
+  // 07 · Laporan aset dan percakapan
   renderReportsTimeline() {
     const timelineEl = document.getElementById("reports-timeline");
     const adminListView = document.getElementById("admin-reports-view");
+    const userListView = document.getElementById("user-reports-view");
     const chatView = document.getElementById("report-chat-view");
     const adminBackBar = document.getElementById("admin-chat-back-bar");
-    const composer = document.getElementById("report-compose-card");
+    const userBackBar = document.getElementById("user-chat-back-bar");
+    const reportComposer = document.getElementById("report-compose-card");
+    const userComposer = document.getElementById("user-chat-compose");
     const adminComposer = document.getElementById("admin-reply-compose");
     const isAdmin = this.currentUser && this.currentUser.role === "admin";
+    const isDraft = !isAdmin && Boolean(this.reportDraftAssetId);
+    const selectedReportId = isAdmin ? this.adminActiveReportId : this.userActiveReportId;
+    const activeReport = selectedReportId
+      ? this.reports.find((report) => report.id === selectedReportId)
+      : null;
+    const isConversationOpen = isAdmin
+      ? Boolean(this.adminActiveReportId)
+      : isDraft || Boolean(activeReport);
 
-    if (isAdmin && !this.adminActiveReportId) {
-      if (composer) composer.classList.add("hidden");
-      if (adminComposer) adminComposer.classList.add("hidden");
-      if (adminListView) adminListView.classList.remove("hidden");
-      if (chatView) chatView.classList.add("hidden");
+    if (adminListView) adminListView.classList.toggle("hidden", !isAdmin || isConversationOpen);
+    if (userListView) userListView.classList.toggle("hidden", isAdmin || isConversationOpen);
+    if (chatView) chatView.classList.toggle("hidden", !isConversationOpen);
+    if (reportComposer) reportComposer.classList.toggle("hidden", !isDraft);
+    if (userComposer) userComposer.classList.toggle("hidden", isAdmin || isDraft || !activeReport);
+    if (adminComposer) adminComposer.classList.toggle("hidden", !isAdmin || !activeReport);
+    if (adminBackBar) adminBackBar.classList.toggle("hidden", !isAdmin || !activeReport);
+    if (userBackBar) userBackBar.classList.toggle("hidden", isAdmin || !isConversationOpen);
 
-      const listContainer = document.getElementById("admin-reports-list");
-      if (!listContainer) return;
+    if (!isConversationOpen) {
+      if (isAdmin) {
+        const listContainer = document.getElementById("admin-reports-list");
+        if (!listContainer) return;
+        let filteredReports = [...this.reports]
+          .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        if (this.adminReportsFilter === "pending") {
+          filteredReports = filteredReports.filter((report) =>
+            this.getReportMessages(report).slice(-1)[0]?.senderRole !== "admin"
+          );
+        } else if (this.adminReportsFilter === "handled") {
+          filteredReports = filteredReports.filter((report) =>
+            this.getReportMessages(report).slice(-1)[0]?.senderRole === "admin"
+          );
+        }
 
-      let filteredReports = [...this.reports].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-      if (this.adminReportsFilter === "pending") {
-        filteredReports = filteredReports.filter(r => !r.feedback);
-      } else if (this.adminReportsFilter === "handled") {
-        filteredReports = filteredReports.filter(r => !!r.feedback);
-      }
+        if (filteredReports.length === 0) {
+          listContainer.innerHTML = `<div class="card" style="text-align:center; padding:20px; color:var(--text-muted); font-size:12px;">Tidak ada laporan pada kategori ini.</div>`;
+          return;
+        }
 
-      if (filteredReports.length === 0) {
-        listContainer.innerHTML = `<div class="card" style="text-align:center; padding:20px; color:var(--text-muted); font-size:12px;">Tidak ada laporan pada kategori ini.</div>`;
-        return;
-      }
-
-      listContainer.innerHTML = filteredReports.map(r => {
-        const isHandled = !!r.feedback;
-        const timeStr = r.createdAt
-          ? new Date(r.createdAt).toLocaleString("id-ID", { dateStyle: "short", timeStyle: "short" })
-          : "";
-        const itemId = this.escapeHTML(r.assetItemId || "");
-        const assetName = this.escapeHTML(r.assetName || "Laporan umum");
-        return `
-          <div class="admin-report-card" onclick="App.openAdminReportChat('${r.id}')">
-            <div class="admin-report-header">
-              <span class="admin-report-sender">${this.escapeHTML(r.senderName || "Pengguna")}</span>
-              <span class="admin-report-time">${timeStr}</span>
-            </div>
-            ${r.assetName || r.assetCode ? `
+        listContainer.innerHTML = filteredReports.map(r => {
+          const latestMessage = this.getReportMessages(r).slice(-1)[0];
+          const isHandled = latestMessage && latestMessage.senderRole === "admin";
+          const timeStr = r.createdAt
+            ? new Date(r.createdAt).toLocaleString("id-ID", { dateStyle: "short", timeStyle: "short" })
+            : "";
+          const itemId = this.escapeHTML(r.assetItemId || "");
+          const assetName = this.escapeHTML(r.assetName || "Laporan aset");
+          const unreadCount = this.getReportUnreadCount(r, "admin");
+          return `
+            <button type="button" class="admin-report-card" onclick="App.openAdminReportChat('${this.escapeHTML(r.id)}')">
+              <div class="admin-report-header">
+                <span class="admin-report-sender">${this.escapeHTML(r.senderName || "Pengguna")}</span>
+                <span class="admin-report-time">${timeStr}</span>
+                ${unreadCount ? `<span class="report-unread-count">${unreadCount > 99 ? "99+" : unreadCount}</span>` : ""}
+              </div>
               <div class="admin-report-asset-badge">
                 ${assetName} ${itemId ? `· ${itemId}` : ""}
               </div>
-            ` : ''}
-            <div class="admin-report-snippet">
-              "${this.escapeHTML(r.message || "")}"
-            </div>
-            <div class="admin-report-footer">
-              <span>${this.escapeHTML(r.room || "Lokasi tidak dicantumkan")}</span>
-              <span class="status-badge ${isHandled ? 'status-Baik' : 'status-Maintenance'}">
-                ${isHandled ? 'Ditangani' : 'Perlu Ditangani'}
-              </span>
-            </div>
-          </div>
-        `;
-      }).join("");
-
+              <div class="admin-report-snippet">
+                "${this.escapeHTML(latestMessage ? latestMessage.text : r.message || "")}"
+              </div>
+              <div class="admin-report-footer">
+                <span>${this.escapeHTML(r.room || "Lokasi tidak dicantumkan")}</span>
+                <span class="status-badge ${isHandled ? "status-Baik" : "status-Maintenance"}">
+                  ${isHandled ? "Ditangani" : "Perlu Ditangani"}
+                </span>
+              </div>
+            </button>
+          `;
+        }).join("");
+      } else {
+        const listContainer = document.getElementById("user-reports-list");
+        if (!listContainer) return;
+        const userReports = this.reports
+          .filter((report) => report.senderUid === this.currentUser.uid)
+          .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        listContainer.innerHTML = userReports.length
+          ? userReports.map((report) => {
+            const latestMessage = this.getReportMessages(report).slice(-1)[0];
+            const unreadCount = this.getReportUnreadCount(report, "user");
+            const replied = latestMessage && latestMessage.senderRole === "admin";
+            const time = report.createdAt
+              ? new Date(report.createdAt).toLocaleString("id-ID", { dateStyle: "short", timeStyle: "short" })
+              : "";
+            return `
+              <button type="button" class="admin-report-card user-report-card" onclick="App.openUserReportChat('${this.escapeHTML(report.id)}')">
+                <div class="admin-report-header">
+                  <span class="admin-report-sender">${this.escapeHTML(report.assetName || "Laporan aset")}</span>
+                  <span class="admin-report-time">${time}</span>
+                  ${unreadCount ? `<span class="report-unread-count">${unreadCount > 99 ? "99+" : unreadCount}</span>` : ""}
+                </div>
+                <div class="admin-report-asset-badge">${this.escapeHTML(report.assetItemId || report.assetCode || report.room || "Aset teridentifikasi")}</div>
+                <div class="admin-report-snippet">${this.escapeHTML(latestMessage ? latestMessage.text : report.message || "")}</div>
+                <div class="admin-report-footer">
+                  <span>${this.escapeHTML(report.assetLocation || report.room || "")}</span>
+                  <span class="status-badge ${replied ? "status-Baik" : "status-Maintenance"}">${replied ? "Dibalas" : "Menunggu Admin"}</span>
+                </div>
+              </button>
+            `;
+          }).join("")
+          : `<div class="card report-empty-state">Belum ada laporan. Untuk memulai, buka aset yang teridentifikasi lalu pilih “Laporkan kondisi”.</div>`;
+      }
       return;
     }
 
-    if (adminListView) adminListView.classList.add("hidden");
-    if (chatView) chatView.classList.remove("hidden");
-    if (composer) composer.classList.toggle("hidden", Boolean(isAdmin));
-    const activeReport = isAdmin
-      ? this.reports.find((report) => report.id === this.adminActiveReportId)
-      : null;
-    if (adminComposer) {
-      adminComposer.classList.toggle("hidden", !isAdmin || !activeReport || Boolean(activeReport.feedback));
-    }
-    if (adminBackBar) {
-      if (isAdmin && this.adminActiveReportId) {
-        adminBackBar.classList.remove("hidden");
-      } else {
-        adminBackBar.classList.add("hidden");
-      }
-    }
-
     if (!timelineEl) return;
-
-    const targetReports = (isAdmin
-      ? this.reports.filter((report) => report.id === this.adminActiveReportId)
-      : this.reports.filter((report) => report.senderUid === this.currentUser.uid))
-      .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
-    if (isAdmin && !targetReports.length) {
+    if (isAdmin && !activeReport) {
       timelineEl.innerHTML = `<div class="card" role="status">Laporan tidak ditemukan atau sudah tidak tersedia.</div>`;
       return;
     }
 
-    const contextReport = targetReports[targetReports.length - 1];
-    if (contextReport) {
+    if (activeReport) {
       document.getElementById("report-context-room-title").textContent =
-        contextReport.room || "Laporan aset";
+        activeReport.assetName || activeReport.room || "Laporan aset";
       document.getElementById("report-context-room-sub").textContent =
-        contextReport.assetLocation || "Percakapan pribadi dengan Admin";
+        `${activeReport.assetItemId || activeReport.assetCode || ""} · ${activeReport.assetLocation || activeReport.room || ""}`;
+      document.getElementById("report-attached-asset-banner").classList.add("hidden");
+    } else if (isDraft) {
+      document.getElementById("report-context-room-title").textContent =
+        document.getElementById("report-asset-name").value || "Laporan aset";
+      document.getElementById("report-context-room-sub").textContent =
+        document.getElementById("report-asset-location").value || "";
     }
 
-    let chatHtml = "";
+    if (isDraft) {
+      timelineEl.innerHTML = `<div class="card report-empty-state">Tulis kondisi barang untuk memulai laporan dan percakapan dengan Admin.</div>`;
+      return;
+    }
 
-    targetReports.forEach((r) => {
-      const timeStr = r.createdAt
-        ? new Date(r.createdAt).toLocaleString("id-ID", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
+    const assetSummary = activeReport.assetName || activeReport.assetItemId || activeReport.assetCode
+      ? `<div class="chat-message-asset">
+          <strong>${this.escapeHTML(activeReport.assetName || "Aset teridentifikasi")}</strong>
+          <span>${this.escapeHTML(activeReport.assetItemId || activeReport.assetCode || "")}</span>
+          <small>${this.escapeHTML(activeReport.assetLocation || activeReport.room || "")}</small>
+        </div>`
+      : "";
+    const messages = this.getReportMessages(activeReport);
+    const messageMarkup = messages.map((message) => {
+      const senderRole = message.senderRole === "admin" ? "admin" : "user";
+      const senderName = message.senderName || (senderRole === "admin" ? "Admin Sarpras" : "Pengguna");
+      const time = message.sentAt
+        ? new Date(message.sentAt).toLocaleString("id-ID", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
         : "";
-      const photo = r.assetPhoto
-        ? `<img src="${this.escapeHTML(r.assetPhoto)}" class="chat-structured-thumb" alt="Foto ${this.escapeHTML(r.assetName || "aset")}" />`
-        : `<div class="chat-structured-placeholder" aria-label="Foto barang belum tersedia"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z"/><path d="m4.5 7.8 7.5 4.4 7.5-4.4M12 12.2V21"/></svg></div>`;
-      const assetDetails = r.assetName || r.assetItemId || r.assetCode
-        ? `<div class="chat-structured-asset">
-            ${photo}
-            <div class="chat-structured-meta">
-              <strong class="chat-structured-name">${this.escapeHTML(r.assetName || "Aset terdata")}</strong>
-              <small class="chat-structured-code">ID barang: ${this.escapeHTML(r.assetItemId || "-")}</small>
-              <small class="chat-structured-code">Kode: ${this.escapeHTML(r.assetCode || "-")}</small>
-              <span class="chat-structured-loc">Lokasi: ${this.escapeHTML(r.assetLocation || "-")}</span>
-              <span class="chat-structured-loc">Area: ${this.escapeHTML(r.assetArea || r.room || "-")}</span>
-            </div>
-          </div>`
-        : "";
-      chatHtml += `
-        <div class="chat-bubble-user" style="margin-top:12px;">
-          <div class="chat-meta">${this.escapeHTML(r.senderName || "Pengguna")} · ${timeStr}</div>
-          ${assetDetails}
-          <div class="chat-text-note">${this.escapeHTML(r.message)}</div>
+      return `
+        <div class="chat-bubble-${senderRole}">
+          <div class="chat-meta">${this.escapeHTML(senderName)} · ${time}</div>
+          <div class="chat-text">${this.escapeHTML(message.text)}</div>
         </div>
-
-        ${r.feedback ? `
-          <div class="chat-bubble-admin" style="margin-top:8px;">
-            <div class="chat-meta">Admin Sarpras · ${r.feedbackAt ? new Date(r.feedbackAt).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) : ""}</div>
-            <div class="chat-text">${this.escapeHTML(r.feedback)}</div>
-            <div style="margin-top:6px;">
-              <span class="status-badge status-Baik">Telah Ditanggapi</span>
-            </div>
-          </div>
-        ` : ""}
       `;
-    });
-
-    timelineEl.innerHTML = chatHtml ||
-      `<div class="card report-empty-state">Belum ada laporan. Pilih detail aset atau tulis laporan untuk menghubungi Admin.</div>`;
+    }).join("");
+    timelineEl.innerHTML = `${assetSummary}${messageMarkup || `<div class="card report-empty-state">Belum ada pesan dalam percakapan ini.</div>`}`;
   },
 
-  async sendFeedback(reportId) {
-    if (!this.currentUser || this.currentUser.role !== "admin") return;
-    const input = document.getElementById("admin-reply-message");
+  async sendChatMessage(reportId, inputId) {
+    if (!this.currentUser) return;
+    const report = this.reports.find((item) => item.id === reportId);
+    const isAdmin = this.currentUser.role === "admin";
+    if (!report || (!isAdmin && report.senderUid !== this.currentUser.uid)) return;
+    const input = document.getElementById(inputId);
     const val = input ? input.value.trim() : "";
     if (!val) return;
-    const report = this.reports.find((item) => item.id === reportId);
-    if (!report) return;
-    const previousFeedback = report.feedback;
-    const previousFeedbackAt = report.feedbackAt;
-    report.feedback = val;
-    report.feedbackAt = new Date().toISOString();
+    if (val.length > 2000) {
+      alert("Pesan maksimal 2.000 karakter.");
+      return;
+    }
+    const sentAt = new Date().toISOString();
+    const message = {
+      id: `message-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      senderUid: this.currentUser.uid,
+      senderName: this.currentUser.name || (isAdmin ? "Admin Sarpras" : "Pengguna"),
+      senderRole: this.currentUser.role,
+      text: val,
+      sentAt
+    };
     try {
-      await SyncService.saveFeedback(report);
+      const unreadCounts = await SyncService.appendReportMessage(reportId, message);
+      report.messages = [...(Array.isArray(report.messages) ? report.messages : []), message];
+      report.adminUnreadCount = unreadCounts.adminUnreadCount;
+      report.userUnreadCount = unreadCounts.userUnreadCount;
+      if (isAdmin) {
+        report.feedback = val;
+        report.feedbackAt = sentAt;
+      }
+      localStorage.setItem("sarpras_reports", JSON.stringify(this.reports));
     } catch (err) {
-      report.feedback = previousFeedback;
-      report.feedbackAt = previousFeedbackAt;
-      alert(`Balasan gagal disimpan: ${err.message}`);
+      alert(`Pesan gagal dikirim: ${err.message}`);
       this.renderReportsTimeline();
       return;
     }
     if (input) input.value = "";
+    this.updateNotification();
     this.renderReportsTimeline();
   },
 

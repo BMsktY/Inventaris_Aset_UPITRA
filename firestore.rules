@@ -10,6 +10,55 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin";
     }
 
+    function validReportMessage(message) {
+      return message is map
+        && message.keys().hasAll([
+          "id", "senderUid", "senderName", "senderRole", "text", "sentAt"
+        ])
+        && message.keys().hasOnly([
+          "id", "senderUid", "senderName", "senderRole", "text", "sentAt"
+        ])
+        && message.id is string
+        && message.senderUid is string
+        && message.senderName is string
+        && message.senderRole in ["admin", "user"]
+        && message.text is string
+        && message.text.size() > 0
+        && message.text.size() <= 2000
+        && message.sentAt is string;
+    }
+
+    function validReportMessageAppend() {
+      let oldMessages = resource.data.get("messages", []);
+      let newMessages = request.resource.data.get("messages", []);
+      let message = newMessages.size() > 0 ? newMessages[newMessages.size() - 1] : {};
+      let adminSender = isAdmin();
+      return signedIn()
+        && (adminSender || resource.data.senderUid == request.auth.uid)
+        && oldMessages is list
+        && newMessages is list
+        && newMessages.size() == oldMessages.size() + 1
+        && newMessages.hasAll(oldMessages)
+        && !oldMessages.hasAll([message])
+        && validReportMessage(message)
+        && message.senderUid == request.auth.uid
+        && message.senderRole == (adminSender ? "admin" : "user")
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "messages", "adminUnreadCount", "userUnreadCount", "feedback", "feedbackAt"
+        ])
+        && request.resource.data.adminUnreadCount is int
+        && request.resource.data.userUnreadCount is int
+        && (adminSender
+          ? request.resource.data.adminUnreadCount == 0
+            && request.resource.data.userUnreadCount == resource.data.get("userUnreadCount", 0) + 1
+            && request.resource.data.feedback == message.text
+            && request.resource.data.feedbackAt == message.sentAt
+          : request.resource.data.adminUnreadCount == resource.data.get("adminUnreadCount", 0) + 1
+            && request.resource.data.userUnreadCount == 0
+            && request.resource.data.get("feedback", "") == resource.data.get("feedback", "")
+            && request.resource.data.get("feedbackAt", "") == resource.data.get("feedbackAt", ""));
+    }
+
     match /users/{uid} {
       allow get: if signedIn() && (request.auth.uid == uid || isAdmin());
       allow list: if isAdmin();
@@ -71,16 +120,31 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly([
           "senderUid", "senderName", "senderEmail", "targetRole", "room",
           "assetId", "assetItemId", "assetCode", "assetName", "assetLocation",
-          "assetArea", "assetPhoto", "message", "feedback", "feedbackAt", "createdAt"
+          "assetArea", "assetPhoto", "message", "messages", "adminUnreadCount",
+          "userUnreadCount", "feedback", "feedbackAt", "createdAt"
         ])
         && request.resource.data.senderUid is string
         && request.resource.data.room is string
         && request.resource.data.message is string
         && request.resource.data.feedback is string
         && request.resource.data.createdAt is string
+        && request.resource.data.assetId is string
+        && request.resource.data.assetId.size() > 0
+        && existsAfter(/databases/$(database)/documents/assets/$(request.resource.data.assetId))
+        && request.resource.data.messages is list
+        && request.resource.data.messages.size() > 0
+        && request.resource.data.messages.size() <= 100
+        && (isAdmin() || request.resource.data.messages.size() == 1)
+        && validReportMessage(request.resource.data.messages[0])
+        && request.resource.data.messages[0].senderUid == request.resource.data.senderUid
+        && request.resource.data.messages[0].senderRole == "user"
+        && request.resource.data.adminUnreadCount is int
+        && request.resource.data.userUnreadCount is int
+        && (isAdmin()
+          || (request.resource.data.adminUnreadCount == (request.resource.data.feedback == "" ? 1 : 0)
+            && request.resource.data.userUnreadCount == (request.resource.data.feedback == "" ? 0 : 1)))
         && (isAdmin() || (request.resource.data.feedback == ""
           && !("feedbackAt" in request.resource.data)))
-        && (!("assetId" in request.resource.data) || request.resource.data.assetId is string)
         && (!("assetItemId" in request.resource.data) || request.resource.data.assetItemId is string)
         && (!("assetCode" in request.resource.data) || request.resource.data.assetCode is string)
         && (!("assetName" in request.resource.data) || request.resource.data.assetName is string)
@@ -88,11 +152,15 @@ service cloud.firestore {
         && (!("assetArea" in request.resource.data) || request.resource.data.assetArea is string)
         && (!("assetPhoto" in request.resource.data) || request.resource.data.assetPhoto is string)
         && (!("feedbackAt" in request.resource.data) || request.resource.data.feedbackAt is string);
-      allow update: if isAdmin()
-        && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(["feedback", "feedbackAt"])
-        && request.resource.data.feedback is string
-        && request.resource.data.feedbackAt is string;
+      allow update: if validReportMessageAppend()
+        || (isAdmin()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["adminUnreadCount"])
+          && request.resource.data.adminUnreadCount == 0)
+        || (signedIn()
+          && !isAdmin()
+          && resource.data.senderUid == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["userUnreadCount"])
+          && request.resource.data.userUnreadCount == 0);
       allow delete: if isAdmin();
     }
 

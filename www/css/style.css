@@ -424,13 +424,19 @@ input:focus, select:focus, textarea:focus {
 
 .badge-dot {
   position: absolute;
-  top: 7px;
-  right: 7px;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
+  top: -5px;
+  right: -5px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 999px;
   background: var(--danger);
   box-shadow: 0 0 0 2px #ffffff;
+  color: #ffffff;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 17px;
+  text-align: center;
 }
 
 .container {
@@ -3038,11 +3044,12 @@ body.report-chat-active #report-chat-view {
 .admin-report-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 8px;
   margin-bottom: 6px;
 }
 
 .admin-report-sender {
+  flex: 1;
   font-size: 12px;
   font-weight: 700;
   color: var(--text-main);
@@ -3051,6 +3058,21 @@ body.report-chat-active #report-chat-view {
 .admin-report-time {
   font-size: 10px;
   color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.report-unread-count {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--danger);
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 20px;
+  text-align: center;
+  flex-shrink: 0;
 }
 
 .admin-report-asset-badge {

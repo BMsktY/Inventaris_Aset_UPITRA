@@ -94,3 +94,9 @@ Web dan Cordova memakai decoder Code 39 ZXing yang dibundel lokal. Plugin `cordo
 - `reports/{reportId}` — laporan privat dan balasan Admin.
 - `scans/{scanId}` — histori pemindaian.
 - `loginHistory/{entryId}` — histori masuk.
+
+Dokumen laporan baru terikat ke `assetId` yang harus menunjuk ke dokumen aset. Pesan awal dan percakapan disimpan pada `messages` sebagai daftar objek `{ id, senderUid, senderName, senderRole, text, sentAt }`. `adminUnreadCount` dan `userUnreadCount` menghitung pesan yang belum dibaca untuk masing-masing pihak; membuka percakapan menandai pesan sebagai dibaca. Field lama `message` dan `feedback` tetap dibaca untuk menampilkan laporan lama. Setelah mengubah rules, deploy rules terbaru agar pengguna dapat membuat laporan dan kedua pihak dapat mengirim pesan:
+
+```powershell
+firebase deploy --only firestore:rules --project sistem-inventaris-aset
+```

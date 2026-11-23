@@ -186,34 +186,29 @@
         <div class="card room-management-card admin-only">
           <div class="section-heading room-management-heading">
             <div>
-              <h2>Kelola gedung & lantai</h2>
-              <p>Daftarkan lokasi sebelum menambahkan ruangan atau aset.</p>
-            </div>
-          </div>
-          <form id="building-form">
-            <div class="form-row-2col">
-              <div class="form-group">
-                <label for="building-name">Nama gedung *</label>
-                <input type="text" id="building-name" placeholder="Contoh: Gedung 6" required maxlength="60" />
-              </div>
-              <div class="form-group">
-                <label for="building-floor">Lantai *</label>
-                <input type="text" id="building-floor" value="Lantai 1" placeholder="Contoh: Lantai 2" required maxlength="60" />
-              </div>
-            </div>
-            <button type="submit" class="btn btn-primary room-submit-button">Simpan gedung / lantai</button>
-            <p id="building-form-status" class="room-form-status" role="status" aria-live="polite"></p>
-          </form>
-          <div id="building-admin-list" class="room-admin-list"></div>
-        </div>
-        <div class="card room-management-card admin-only">
-          <div class="section-heading room-management-heading">
-            <div>
               <h2>Kelola ruangan</h2>
-              <p>Tambahkan ruangan beserta gedung dan lantainya.</p>
+              <p>Atur gedung, lantai, dan ruangan pada satu tempat.</p>
             </div>
             <span id="room-admin-count">0 ruangan</span>
           </div>
+          <details class="building-management-inline">
+            <summary>Kelola gedung dan lantai</summary>
+            <form id="building-form">
+              <div class="form-row-2col">
+                <div class="form-group">
+                  <label for="building-name">Nama gedung *</label>
+                  <input type="text" id="building-name" placeholder="Contoh: Gedung 6" required maxlength="60" />
+                </div>
+                <div class="form-group">
+                  <label for="building-floor">Lantai *</label>
+                  <input type="text" id="building-floor" value="Lantai 1" placeholder="Contoh: Lantai 2" required maxlength="60" />
+                </div>
+              </div>
+              <button type="submit" class="btn btn-primary room-submit-button">Simpan gedung / lantai</button>
+              <p id="building-form-status" class="room-form-status" role="status" aria-live="polite"></p>
+            </form>
+            <div id="building-admin-list" class="room-admin-list"></div>
+          </details>
           <form id="room-form">
             <div class="form-group">
               <label for="room-name">Nama ruangan *</label>
@@ -377,11 +372,24 @@
           <div id="admin-reports-list" class="admin-reports-list"></div>
         </div>
 
-        <!-- Tampilan Percakapan Laporan (Untuk Pengguna atau Admin saat membuka salah satu laporan) -->
-        <div id="report-chat-view">
+        <div id="user-reports-view" class="user-only hidden">
+          <div class="page-intro">
+            <h1>Laporan saya</h1>
+            <p>Pilih aset yang sudah teridentifikasi untuk memulai laporan dan percakapan.</p>
+          </div>
+          <div id="user-reports-list" class="admin-reports-list"></div>
+        </div>
+
+        <!-- Tampilan percakapan setelah laporan aset dipilih -->
+        <div id="report-chat-view" class="hidden">
           <div id="admin-chat-back-bar" class="hidden" style="margin-bottom: 10px;">
             <button type="button" class="btn btn-secondary btn-sm" onclick="App.backToAdminReportList()" style="display:inline-flex; align-items:center; gap:6px;">
               ← Kembali ke Daftar Laporan
+            </button>
+          </div>
+          <div id="user-chat-back-bar" class="hidden" style="margin-bottom: 10px;">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="App.backToUserReports()" style="display:inline-flex; align-items:center; gap:6px;">
+              ← Kembali ke Laporan Saya
             </button>
           </div>
 
@@ -428,24 +436,35 @@
               <input type="hidden" id="report-asset-photo" value="" />
 
               <div class="report-input-row">
-                <input type="text" id="report-message" placeholder="Tulis laporan / komentar kondisi aset..." required autocomplete="off" />
+                <input type="text" id="report-message" placeholder="Tulis laporan / komentar kondisi aset..." maxlength="2000" required autocomplete="off" />
                 <button type="submit" class="btn-chat-send" aria-label="Kirim laporan">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
                 </button>
               </div>
             </form>
           </div>
-        </div>
 
-        <div id="admin-reply-compose" class="card report-compose-card admin-only hidden">
-          <form id="admin-reply-form" class="report-chat-form">
+          <div id="user-chat-compose" class="card report-compose-card user-only hidden">
+            <form id="user-chat-form" class="report-chat-form">
+              <div class="report-input-row">
+                <input type="text" id="user-chat-message" placeholder="Tulis pesan..." maxlength="2000" required autocomplete="off" />
+                <button type="submit" class="btn-chat-send" aria-label="Kirim pesan">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <div id="admin-reply-compose" class="card report-compose-card admin-only hidden">
+            <form id="admin-reply-form" class="report-chat-form">
             <div class="report-input-row">
-              <input type="text" id="admin-reply-message" placeholder="Tulis balasan untuk pelapor..." required autocomplete="off" />
+              <input type="text" id="admin-reply-message" placeholder="Tulis balasan untuk pelapor..." maxlength="2000" required autocomplete="off" />
               <button type="submit" class="btn-chat-send" aria-label="Kirim balasan">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
               </button>
             </div>
-          </form>
+            </form>
+          </div>
         </div>
       </section>
 

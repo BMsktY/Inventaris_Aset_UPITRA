@@ -223,19 +223,50 @@ const SyncService = {
     localStorage.setItem("sarpras_reports", JSON.stringify([...reportsById.values()]));
   },
 
-  async saveFeedback(report) {
+  async appendReportMessage(reportId, message) {
+    const report = App.reports.find((item) => item.id === reportId);
+    if (!report) throw new Error("Laporan tidak ditemukan.");
+    const isAdmin = message.senderRole === "admin";
     if (this.firebaseEnabled) {
-      await FirebaseService.db.collection(this.collections.reports).doc(report.id).update({
-        feedback: report.feedback,
-        feedbackAt: report.feedbackAt
+      const reportRef = FirebaseService.db.collection(this.collections.reports).doc(reportId);
+      return FirebaseService.db.runTransaction(async (transaction) => {
+        const snapshot = await transaction.get(reportRef);
+        if (!snapshot.exists) throw new Error("Laporan tidak ditemukan di Firebase.");
+        const current = snapshot.data();
+        const adminUnreadCount = Number(current.adminUnreadCount) || 0;
+        const userUnreadCount = Number(current.userUnreadCount) || 0;
+        const updates = {
+          messages: firebase.firestore.FieldValue.arrayUnion(message),
+          adminUnreadCount: isAdmin ? 0 : adminUnreadCount + 1,
+          userUnreadCount: isAdmin ? userUnreadCount + 1 : 0
+        };
+        if (isAdmin) {
+          updates.feedback = message.text;
+          updates.feedbackAt = message.sentAt;
+        }
+        transaction.update(reportRef, updates);
+        return {
+          adminUnreadCount: updates.adminUnreadCount,
+          userUnreadCount: updates.userUnreadCount
+        };
       });
-      localStorage.setItem("sarpras_reports", JSON.stringify(App.reports));
-      return;
     }
-    const savedReports = JSON.parse(localStorage.getItem("sarpras_reports") || "[]");
-    const reportsById = new Map([...App.reports, ...savedReports].map((item) => [item.id, item]));
-    reportsById.set(report.id, report);
-    localStorage.setItem("sarpras_reports", JSON.stringify([...reportsById.values()]));
+    return {
+      adminUnreadCount: isAdmin ? 0 : (Number(report.adminUnreadCount) || 0) + 1,
+      userUnreadCount: isAdmin ? (Number(report.userUnreadCount) || 0) + 1 : 0
+    };
+  },
+
+  async markReportRead(reportId, role) {
+    const field = role === "admin" ? "adminUnreadCount" : "userUnreadCount";
+    if (this.firebaseEnabled) {
+      const reportRef = FirebaseService.db.collection(this.collections.reports).doc(reportId);
+      await FirebaseService.db.runTransaction(async (transaction) => {
+        const snapshot = await transaction.get(reportRef);
+        if (!snapshot.exists) throw new Error("Laporan tidak ditemukan di Firebase.");
+        transaction.update(reportRef, { [field]: 0 });
+      });
+    }
   },
 
   async recordScan(assetId, scanEntry) {
@@ -282,13 +313,42 @@ const SyncService = {
       entries.slice(offset, offset + 450).forEach(({ collection, data }) => {
         const { id, scanHistory, lastScannedAt, lastScannedBy, statusBadge, ...fields } = data;
         if (!id) throw new Error(`Data ${collection} lokal tidak memiliki ID.`);
-        const migratedFields = collection === this.collections.reports
-          ? Object.fromEntries(Object.entries(fields).filter(([key]) => [
+        let migratedFields = fields;
+        if (collection === this.collections.reports) {
+          migratedFields = Object.fromEntries(Object.entries(fields).filter(([key]) => [
             "senderUid", "senderName", "senderEmail", "targetRole", "room",
             "assetId", "assetItemId", "assetCode", "assetName", "assetLocation",
-            "assetArea", "assetPhoto", "message", "feedback", "feedbackAt", "createdAt"
-          ].includes(key)))
-          : fields;
+            "assetArea", "assetPhoto", "message", "messages", "adminUnreadCount",
+            "userUnreadCount", "feedback", "feedbackAt", "createdAt"
+          ].includes(key)));
+          const createdAt = typeof migratedFields.createdAt === "string"
+            ? migratedFields.createdAt
+            : new Date().toISOString();
+          const feedback = typeof migratedFields.feedback === "string" ? migratedFields.feedback : "";
+          const messages = Array.isArray(migratedFields.messages) && migratedFields.messages.length
+            ? migratedFields.messages
+            : [{
+              id: `${id}-initial`,
+              senderUid: migratedFields.senderUid,
+              senderName: migratedFields.senderName || "Pengguna",
+              senderRole: "user",
+              text: migratedFields.message || "",
+              sentAt: createdAt
+            }];
+          migratedFields = {
+            ...migratedFields,
+            message: migratedFields.message || messages[0].text || "",
+            messages,
+            feedback,
+            adminUnreadCount: Number.isInteger(migratedFields.adminUnreadCount)
+              ? migratedFields.adminUnreadCount
+              : feedback ? 0 : 1,
+            userUnreadCount: Number.isInteger(migratedFields.userUnreadCount)
+              ? migratedFields.userUnreadCount
+              : feedback ? 1 : 0,
+            createdAt
+          };
+        }
         batch.set(FirebaseService.db.collection(collection).doc(id), migratedFields);
       });
       await batch.commit();
